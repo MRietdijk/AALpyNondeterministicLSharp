@@ -9,12 +9,12 @@ from pydot import Dot, Node, Edge
 
 from aalpy.automata import Dfa, MooreMachine, Mdp, Onfsm, MealyState, DfaState, MooreState, MealyMachine, \
     MdpState, StochasticMealyMachine, StochasticMealyState, OnfsmState, MarkovChain, McState, Sevpa, SevpaState, \
-    SevpaTransition, Vpa, VpaState, VpaTransition, NDMooreMachine, NDMooreState
+    SevpaTransition, Vpa, VpaState, VpaTransition, NDMooreMachine, NDMooreState, Lts, LtsState
 
 file_types = ['dot', 'png', 'svg', 'pdf', 'string']
 automaton_types = {Dfa: 'dfa', MealyMachine: 'mealy', MooreMachine: 'moore', Mdp: 'mdp',
                    StochasticMealyMachine: 'smm', Onfsm: 'onfsm', NDMooreMachine: 'ndmoore', MarkovChain: 'mc',
-                   Sevpa: 'sevpa', Vpa: 'vpa'}
+                   Sevpa: 'sevpa', Vpa: 'vpa', Lts: 'lts'}
 
 
 def _wrap_label(label: str) -> str:
@@ -46,7 +46,7 @@ def _get_node(state: Any, automaton_type: str) -> Node | None:
     if automaton_type in ['moore', 'ndmoore']:
         return Node(state.state_id, label=_wrap_label(f'{state.state_id}|{state.output}'), shape='record',
                     style='rounded')
-    if automaton_type == 'onfsm':
+    if automaton_type == 'onfsm' or automaton_type == 'lts':
         return Node(state.state_id, label=_wrap_label(state.state_id))
     if automaton_type == 'mc':
         return Node(state.state_id, label=_wrap_label(f'{state.output}'))
@@ -97,6 +97,12 @@ def _add_transition_to_graph(graph: Dot, state: Any, automaton_type: str, displa
                 if not display_same_state_trans and state.state_id == new_state.state_id:
                     continue
                 graph.add_edge(Edge(state.state_id, new_state.state_id, label=_wrap_label(f'{i}')))
+    if automaton_type == 'lts':
+        for label, new_states in state.transitions.items():
+            for new_state in new_states:
+                if not display_same_state_trans and state.state_id == new_state.state_id:
+                    continue
+                graph.add_edge(Edge(state.state_id, new_state.state_id, label=_wrap_label(f'{label}')))
     if automaton_type == 'mc':
         for new_state, prob in state.transitions:
             prob = round(prob, round_floats) if round_floats else prob
@@ -258,6 +264,15 @@ def _process_label(label: str, source: Any, destination: Any, automaton_type: st
         source.transitions[inp].append((out, destination))
     if automaton_type == 'ndmoore':
         source.transitions[int(label) if label.isdigit() else label].append(destination)
+    if automaton_type == 'lts':
+        kind, sym = label[0], label[1:]
+        sym = int(sym) if sym.isdigit() else sym
+        if kind == '?':
+            source.add_input(sym, destination)
+        elif kind == '!':
+            source.add_output(sym, destination)
+        else:
+            raise ValueError(f"LTS label '{label}' must start with '?' or '!'")
     if automaton_type == 'mc':
         prob = label
         source.transitions.append((destination, float(prob)))
@@ -387,7 +402,7 @@ def load_automaton_from_file(path: str | Path, automaton_type: str, compute_pref
 
     :param str | Path path: path to the file
     :param str automaton_type: type of the automaton, one of ['dfa', 'mealy', 'moore', 'mdp', 'smm',
-        'onfsm', 'ndmoore', 'mc', 'sevpa', 'vpa']
+        'onfsm', 'ndmoore', 'mc', 'sevpa', 'vpa', 'lts']
     :param bool compute_prefixes: it True, shortest path to reach every state will be computed and saved in the
         prefix of the state. Useful when loading the model to use them as a equivalence oracle.
     :return Any: loaded automaton
@@ -397,7 +412,8 @@ def load_automaton_from_file(path: str | Path, automaton_type: str, compute_pref
     id_node_aut_map = {'dfa': (DfaState, Dfa), 'mealy': (MealyState, MealyMachine), 'moore': (MooreState, MooreMachine),
                        'onfsm': (OnfsmState, Onfsm), 'mdp': (MdpState, Mdp), 'mc': (McState, MarkovChain),
                        'smm': (StochasticMealyState, StochasticMealyMachine), 'sevpa': (SevpaState, Sevpa),
-                       'vpa': (VpaState, Vpa), 'ndmoore': (NDMooreState, NDMooreMachine)}
+                       'vpa': (VpaState, Vpa), 'ndmoore': (NDMooreState, NDMooreMachine),
+                       'lts': (LtsState, Lts)}
 
     nodeType, aut_type = id_node_aut_map[automaton_type]
 
@@ -434,9 +450,9 @@ def load_automaton_from_file(path: str | Path, automaton_type: str, compute_pref
         _process_label(label, node_label_dict[source], node_label_dict[destination], automaton_type)
 
     automaton = aut_type(initial_state, list(node_label_dict.values()))
-    if automaton_type not in {'mc', 'sevpa', 'vpa'} and not automaton.is_input_complete():
+    if automaton_type not in {'mc', 'sevpa', 'vpa', 'lts'} and not automaton.is_input_complete():
         print('Warning: Loaded automaton is not input complete.')
-    if compute_prefixes and automaton_type not in {'mc', 'sevpa', 'vpa'}:
+    if compute_prefixes and automaton_type not in {'mc', 'sevpa', 'vpa', 'lts'}:
         for state in automaton.states:
             state.prefix = automaton.get_shortest_path(automaton.initial_state, state)
     return automaton

@@ -216,7 +216,8 @@ def make_input_complete(automaton: Any, missing_transition_go_to: str = 'self_lo
     """
     from aalpy.base import DeterministicAutomaton
     from aalpy.automata import Dfa, MooreState, MealyMachine, Mdp, StochasticMealyMachine, Onfsm, \
-        DfaState, MealyState, MooreMachine, OnfsmState, MdpState, StochasticMealyState, NDMooreMachine, NDMooreState
+        DfaState, MealyState, MooreMachine, OnfsmState, MdpState, StochasticMealyState, NDMooreMachine, NDMooreState, \
+        Lts, LtsState
 
     assert missing_transition_go_to in {'self_loop', 'sink_state'}
 
@@ -232,7 +233,8 @@ def make_input_complete(automaton: Any, missing_transition_go_to: str = 'self_lo
                             Onfsm: OnfsmState(state_id='sink'),
                             NDMooreMachine: NDMooreState(state_id='sink'),
                             Mdp: MdpState(state_id='sink', output='sink_state'),
-                            StochasticMealyMachine: StochasticMealyState(state_id='sink')}
+                            StochasticMealyMachine: StochasticMealyState(state_id='sink'),
+                            Lts: LtsState(state_id='sink')}
 
     if missing_transition_go_to == 'sink_state':
         sink_state = sink_state_type_dict[automaton.__class__]
@@ -250,6 +252,8 @@ def make_input_complete(automaton: Any, missing_transition_go_to: str = 'self_lo
                 elif isinstance(automaton, (Onfsm, NDMooreMachine)):
                     state.transitions[i].append(('epsilon', target_state) if
                                                 isinstance(automaton, Onfsm) else target_state)
+                elif isinstance(automaton, Lts):
+                    state.transitions.setdefault(i, []).append(target_state)
                 elif isinstance(automaton, Mdp):
                     state.transitions[i].append((target_state, 1.))
                 elif isinstance(automaton, StochasticMealyMachine):

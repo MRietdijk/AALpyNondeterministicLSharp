@@ -8,3 +8,4 @@ from .MarkovChain import MarkovChain, McState
 from .NonDeterministicMooreMachine import NDMooreMachine, NDMooreState
 from .Sevpa import Sevpa, SevpaState, SevpaAlphabet, SevpaTransition
 from .Vpa import Vpa, VpaAlphabet, VpaState, VpaTransition
+from .Lts import Lts, LtsState, In, Out, Quiescence, QUIESCENCE
