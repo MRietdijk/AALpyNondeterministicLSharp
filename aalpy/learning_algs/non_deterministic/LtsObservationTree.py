@@ -1,5 +1,6 @@
 from aalpy.automata.Lts import Label, Out, In, Lts, Trace
 from random import choice
+from itertools import combinations
 
 class LtsNode:
     """
@@ -117,6 +118,30 @@ class LtsObservationTree:
 
         return frontier_nodes
 
+    def process_example(self, example: Trace, node: LtsNode) -> bool:
+        current_node = node
+
+        for label in example:
+            if current_node.is_enabled(label):
+                current_node = current_node.successors[label]
+                continue
+            elif isinstance(label, Out):
+                if current_node.is_complete:
+                    return False
+                b = False
+                o = None
+                while label != o and not b:
+                    pass
+                    # TODO: Do equivalence queries on `current_node`
+                if b:
+                    current_node.mark_complete()
+                    return False
+                current_node = current_node.successors[label]
+            else:
+                current_node = current_node.extend_and_get(label)
+        
+        return True
+
     def promotion_rule(self) -> None:
         frontier_nodes = self.get_frontier()
 
@@ -139,9 +164,21 @@ class LtsObservationTree:
     def completion_rule(self) -> None:
         for basis_node in self.basis:
             if not basis_node.is_complete:
+                pass
                 # TODO: Call completeness query on `basis_node`
 
-    
+    def find_candidates(self, node: LtsNode) -> set[LtsNode]:
+        candidates = set()
+        for basis_node in self.basis:
+            if not basis_node.is_apart_from(basis_node):
+                candidates.add(basis_node)
 
+        return candidates
 
+    def identification_rule(self) -> None:
+        for frontier_node in self.get_frontier():
+            candidates = self.find_candidates(frontier_node)
 
+            for r1, r2 in combinations(candidates, 2):
+                witness = r1.get_witness(r2)
+                # TODO: Process example on `witness` and `frontier_node`
