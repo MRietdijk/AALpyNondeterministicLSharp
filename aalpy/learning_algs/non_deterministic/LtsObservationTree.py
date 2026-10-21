@@ -129,6 +129,15 @@ class LtsObservationTree:
             if all(apartness_dict.values()):
                 self.basis.add(frontier_node)
 
+    def extension_rule(self) -> None:  
+        for basis_node in self.basis:
+            inputs = basis_node.inputs()
+            for i in self.input_labels - inputs:
+                new_node = basis_node.extend_and_get(i)
+                # TODO: do a completeness query on `new_node`
+
+    
+
     
 
 
