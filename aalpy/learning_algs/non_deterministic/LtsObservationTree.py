@@ -136,7 +136,10 @@ class LtsObservationTree:
                 new_node = basis_node.extend_and_get(i)
                 # TODO: do a completeness query on `new_node`
 
-    
+    def completion_rule(self) -> None:
+        for basis_node in self.basis:
+            if not basis_node.is_complete:
+                # TODO: Call completeness query on `basis_node`
 
     
 
