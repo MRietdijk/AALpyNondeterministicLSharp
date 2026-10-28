@@ -1,4 +1,4 @@
-from aalpy.automata.Lts import Label, Out, In, Lts, Trace, QUIESCENCE
+from aalpy.automata.Lts import Label, Out, In, Lts, Trace, QUIESCENCE, SuspensionAutomaton, LtsState
 from random import choice
 from itertools import combinations
 from aalpy.base.LtsOracle import LtsOracle
@@ -150,7 +150,7 @@ class LtsObservationTree:
             if (node.is_enabled(label)):
                 next_node = node.get_successor(label)
                 if not next_node:
-                    raise ValueError("{label} is enabled in {node}, but has no successor")
+                    raise ValueError(f"{label} is enabled in {node}, but has no successor")
                 return self.do(next_node, rest)
             elif (isinstance(label, Out)):
                 if node.is_complete:
@@ -163,7 +163,7 @@ class LtsObservationTree:
 
                 next_node = node.get_successor(label)
                 if not next_node:
-                    raise ValueError("{label} is enabled in {node}, but has no successor")
+                    raise ValueError(f"{label} is enabled in {node}, but has no successor")
                                 
                 return self.do(next_node, rest)
             else:
@@ -209,7 +209,7 @@ class LtsObservationTree:
             for r1, r2 in combinations(candidates, 2):
                 witness = r1.get_witness(r2)
                 if witness == None:
-                    raise AssertionError("{r1} and {r2} are in the basis, but are not apart from each other")
+                    raise AssertionError(f"{r1} and {r2} are in the basis, but are not apart from each other")
 
                 self.do(frontier_node, witness)
 
@@ -242,3 +242,23 @@ class LtsObservationTree:
                 continue
 
             self.do(r, witness)
+
+    def build_hypothesis(self) -> SuspensionAutomaton
+        tree_node_to_state: dict[LtsNode, LtsState] = dict()
+
+        for node in self.basis:
+            tree_node_to_state[node] = LtsState(f"s{node.id}")
+
+        for basis_node, state in tree_node_to_state.items():
+            for label in self.input_labels | basis_node.outputs():
+                successor = basis_node.get_successor(label)
+
+                if successor is None:
+                    raise AssertionError(f"Not all basis states are input-enabled: {label} is not enabled in {basis_node.id}")
+
+                state.transitions[label] = [tree_node_to_state[successor]]
+
+        for node, state in tree_node_to_state.items():
+            self.state_to_tree_node[state] = node
+
+        return SuspensionAutomaton(tree_node_to_state[self.root], list(tree_node_to_state.values()))
