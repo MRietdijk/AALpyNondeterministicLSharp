@@ -212,3 +212,33 @@ class LtsObservationTree:
                     raise AssertionError("{r1} and {r2} are in the basis, but are not apart from each other")
 
                 self.do(frontier_node, witness)
+
+    def find_identifier(self, node: LtsNode) -> LtsNode | None:
+        candidates = self.find_candidates(node)
+        if len(candidates) == 1:
+            return candidates.pop()
+        else:
+            return None
+
+    def stable_rule(self) -> None:
+        for q in self.basis:
+            r = q.get_successor(QUIESCENCE)
+            if r is None:
+                continue
+
+            q_prime = self.find_identifier(r)
+
+            if q_prime is None:
+                continue
+
+            r_prime = q_prime.get_successor(QUIESCENCE)
+
+            if r_prime is None:
+                continue
+
+            witness = q_prime.get_witness(r_prime)
+
+            if witness is None:
+                continue
+
+            self.do(r, witness)
