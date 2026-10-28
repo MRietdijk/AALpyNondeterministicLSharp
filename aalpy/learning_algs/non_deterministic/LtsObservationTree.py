@@ -3,6 +3,7 @@ from random import choice
 from itertools import combinations
 from aalpy.base.LtsOracle import LtsOracle
 
+from collections import deque
 class LtsNode:
     """
     Single node of the observation tree for an LTS storing its labels
@@ -304,10 +305,6 @@ class LtsObservationTree:
         else:
             self.process_conflict(hypothesis, access_q_prime + sigma_2, conflict)
 
-
-
-
-
     def process_counter_example(self, hypothesis: SuspensionAutomaton, counter_example: Trace):
         self.do(self.root, counter_example)
         new_trace = []
@@ -331,6 +328,38 @@ class LtsObservationTree:
                             
         self.process_conflict(hypothesis, new_trace, [conflict])
 
+    def __shortest_trace_difference(self, q_prime: LtsState, q: LtsState) -> Trace | None:
+        queue = deque([(q_prime, q, [])])
+        visited = {(q_prime, q)}
+
+        while queue:
+            p_prime, p, trace = queue.popleft()
+            for label, targets in p_prime.transitions.items():
+                if label not in p.transitions:
+                    return trace + [label]
+                pair = (targets[0], p.transitions[label][0])
+                if pair not in visited:
+                    visited.add(pair)
+                    queue.append((*pair, trace + [label]))
+
+        return None
+
+    def quiescent_reducible_rule(self, hypothesis: SuspensionAutomaton) -> None:
+        for q in hypothesis.states:
+            if QUIESCENCE not in q.outputs():
+                continue
+
+            q_prime = q.transitions[QUIESCENCE][0]
+            sigma = self.__shortest_trace_difference(q_prime, q)
             
+            if sigma is None:
+                continue
 
+            q_node = self.state_to_tree_node[q]
 
+            access_q = self.get_access_sequence(q_node)
+
+            if self.do(q_node, sigma):
+                self.process_counter_example(hypothesis, access_q + sigma)
+            else:
+                self.process_counter_example(hypothesis, access_q + [QUIESCENCE] + sigma)
