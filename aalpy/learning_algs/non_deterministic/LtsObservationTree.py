@@ -1,6 +1,7 @@
 from aalpy.automata.Lts import Label, Out, In, Lts, Trace
 from random import choice
 from itertools import combinations
+from aalpy.base.LtsOracle import LtsOracle
 
 class LtsNode:
     """
@@ -72,10 +73,10 @@ class LtsNode:
 
 class LtsObservationTree:
 
-    def __init__(self, input_labels: set[In], sul: Lts) -> None:
+    def __init__(self, input_labels: set[In], sul: Lts, oracle: LtsOracle) -> None:
         self.sul: Lts = sul
         self.input_labels: set[In] = input_labels
-        
+        self.oracle = oracle
         self.root = LtsNode()
         self.basis = {self.root}
 
@@ -88,7 +89,7 @@ class LtsObservationTree:
         for label in trace:
             current_node = current_node.extend_and_get(label)
 
-    def get_successor(self, trace: Trace) -> LtsNode | None:
+    def tree_after(self, trace: Trace) -> LtsNode | None:
         current_node = self.root
         for label in trace:
             successor_node = current_node.get_successor(label)
@@ -118,29 +119,48 @@ class LtsObservationTree:
 
         return frontier_nodes
 
-    def process_example(self, example: Trace, node: LtsNode) -> bool:
-        current_node = node
+    def check_complete_output(self, node: LtsNode) -> bool:
+        access_sequence = self.get_access_sequence(node)
+        output_set = node.outputs()
 
-        for label in example:
-            if current_node.is_enabled(label):
-                current_node = current_node.successors[label]
-                continue
-            elif isinstance(label, Out):
-                if current_node.is_complete:
+        query_result = self.oracle.completeness_query(access_sequence, output_set)
+
+        if query_result == None:
+            node.mark_complete()
+        else:
+            node.extend_and_get(query_result)
+
+        return query_result == None
+
+    def do(self, node: LtsNode, witness: Trace) -> bool:
+        if (len(witness) == 0):
+            return True
+        else:
+            label = witness[0]
+            rest = witness[1:]
+
+            if (node.is_enabled(label)):
+                next_node = node.get_successor(label)
+                if not next_node:
+                    raise ValueError("{label} is enabled in {node}, but has no successor")
+                return self.do(next_node, rest)
+            elif (isinstance(label, Out)):
+                if node.is_complete:
                     return False
-                b = False
-                o = None
-                while label != o and not b:
-                    pass
-                    # TODO: Do equivalence queries on `current_node`
-                if b:
-                    current_node.mark_complete()
-                    return False
-                current_node = current_node.successors[label]
+
+                while (not node.is_enabled(label)):
+                    b = self.check_complete_output(node)
+                    if (b):
+                        return False
+
+                next_node = node.get_successor(label)
+                if not next_node:
+                    raise ValueError("{label} is enabled in {node}, but has no successor")
+                                
+                return self.do(next_node, rest)
             else:
-                current_node = current_node.extend_and_get(label)
-        
-        return True
+                new_node = node.extend_and_get(label)
+                return self.do(new_node, rest)
 
     def promotion_rule(self) -> None:
         frontier_nodes = self.get_frontier()
@@ -158,19 +178,18 @@ class LtsObservationTree:
         for basis_node in self.basis:
             inputs = basis_node.inputs()
             for i in self.input_labels - inputs:
-                new_node = basis_node.extend_and_get(i)
-                # TODO: do a completeness query on `new_node`
+                basis_node.extend_and_get(i)
+                
 
     def completion_rule(self) -> None:
         for basis_node in self.basis:
             if not basis_node.is_complete:
-                pass
-                # TODO: Call completeness query on `basis_node`
-
+                self.check_complete_output(basis_node)
+                
     def find_candidates(self, node: LtsNode) -> set[LtsNode]:
         candidates = set()
         for basis_node in self.basis:
-            if not basis_node.is_apart_from(basis_node):
+            if not node.is_apart_from(basis_node):
                 candidates.add(basis_node)
 
         return candidates
@@ -181,4 +200,7 @@ class LtsObservationTree:
 
             for r1, r2 in combinations(candidates, 2):
                 witness = r1.get_witness(r2)
-                # TODO: Process example on `witness` and `frontier_node`
+                if witness == None:
+                    raise AssertionError("{r1} and {r2} are in the basis, but are not apart from each other")
+
+                self.do(frontier_node, witness)
