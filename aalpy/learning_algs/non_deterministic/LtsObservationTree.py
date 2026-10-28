@@ -363,3 +363,11 @@ class LtsObservationTree:
                 self.process_counter_example(hypothesis, access_q + sigma)
             else:
                 self.process_counter_example(hypothesis, access_q + [QUIESCENCE] + sigma)
+
+    def equivalence_rule(self, hypothesis: SuspensionAutomaton) -> bool:
+        counter_example = self.oracle.find_cex(hypothesis)
+
+        if counter_example is None:
+            return True
+
+        self.process_counter_example(hypothesis, counter_example)
