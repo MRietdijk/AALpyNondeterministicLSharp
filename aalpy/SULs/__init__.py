@@ -3,3 +3,4 @@ from .MonitoringSUL import MonitoringSUL
 from .PyMethodSUL import FunctionDecorator, PyClassSUL
 from .RegexSUL import RegexSUL
 from .TomitaSUL import TomitaSUL
+from .LtsAutomatonSUL import LtsAutomatonSUL
