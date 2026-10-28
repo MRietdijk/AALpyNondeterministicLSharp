@@ -88,9 +88,7 @@ class LtsObservationTree:
         self.root = LtsNode()
         self.basis = {self.root}
 
-        self.states_dict = dict()
-
-        self.state_to_tree_node = dict()
+        self.state_to_tree_node: dict[LtsState, LtsNode] = dict()
 
     def insert_observation(self, trace: Trace) -> None:
         current_node = self.root
@@ -243,7 +241,7 @@ class LtsObservationTree:
 
             self.do(r, witness)
 
-    def build_hypothesis(self) -> SuspensionAutomaton
+    def build_hypothesis(self) -> SuspensionAutomaton:
         tree_node_to_state: dict[LtsNode, LtsState] = dict()
 
         for node in self.basis:
@@ -262,3 +260,77 @@ class LtsObservationTree:
             self.state_to_tree_node[state] = node
 
         return SuspensionAutomaton(tree_node_to_state[self.root], list(tree_node_to_state.values()))
+
+    def __prefix_to_frontier(self, trace: Trace):
+        prefix = []
+        current_node = self.root
+        frontier = self.get_frontier()
+        for label in trace:
+            if current_node in frontier or current_node is None:
+                break
+
+            current_node = current_node.get_successor(label)
+
+        return prefix
+
+    def process_conflict(self, hypothesis: SuspensionAutomaton, trace: Trace, conflict: Trace):
+        r = self.tree_after(trace)
+
+        if r in self.basis | self.get_frontier():
+            return
+
+        rho = self.__prefix_to_frontier(trace)
+
+        h = (len(rho) + len(trace)) // 2
+
+        sigma_1 = trace[:h]
+        sigma_2 = trace[h:]
+
+        q_prime_hypothesis = hypothesis.after(hypothesis.initial_state, sigma_1)
+        q_prime_hypothesis = q_prime_hypothesis.pop()
+        q_prime_tree = self.state_to_tree_node[q_prime_hypothesis]
+        r_prime = self.tree_after(sigma_1)
+
+        if r_prime is None:
+            raise AssertionError("process_conflict: sigma_1 is not defined")
+
+        access_q_prime = self.get_access_sequence(q_prime_tree)
+
+        self.do(self.root, access_q_prime + sigma_2 + conflict)
+
+        witness_q_prime_r_prime = q_prime_tree.get_witness(r_prime)
+        if witness_q_prime_r_prime:
+            self.process_conflict(hypothesis, sigma_1, witness_q_prime_r_prime)
+        else:
+            self.process_conflict(hypothesis, access_q_prime + sigma_2, conflict)
+
+
+
+
+
+    def process_counter_example(self, hypothesis: SuspensionAutomaton, counter_example: Trace):
+        self.do(self.root, counter_example)
+        new_trace = []
+        conflict: Label | None = None
+        if (hypothesis.after(hypothesis.initial_state, counter_example)):
+            new_trace = counter_example[:-1]
+            conflict = counter_example[-1]
+        else:
+            state_hypothesis = hypothesis.initial_state
+            for label in counter_example:
+                if not hypothesis.after(state_hypothesis, [label]):
+                    conflict = label
+                    break
+                new_trace.append(label)
+
+        if isinstance(conflict, In):
+            raise AssertionError("Hypothesis is not input-enabled")
+
+        if conflict is None:
+            raise AssertionError("No conflict found in counter example")
+                            
+        self.process_conflict(hypothesis, new_trace, [conflict])
+
+            
+
+
