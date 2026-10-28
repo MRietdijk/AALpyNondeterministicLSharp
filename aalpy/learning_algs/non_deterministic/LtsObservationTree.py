@@ -1,4 +1,4 @@
-from aalpy.automata.Lts import Label, Out, In, Lts, Trace
+from aalpy.automata.Lts import Label, Out, In, Lts, Trace, QUIESCENCE
 from random import choice
 from itertools import combinations
 from aalpy.base.LtsOracle import LtsOracle
@@ -11,18 +11,26 @@ class LtsNode:
 
     _id_counter = 0
 
-    def __init__(self, parent: 'LtsNode | None' = None, incomming_transition_label: Label | None = None) -> None:
+    def __init__(self, parent: 'LtsNode | None' = None, incomming_transition_label: Label | None = None, is_stable: bool = False) -> None:
         LtsNode._id_counter += 1
         self.id: int = LtsNode._id_counter
         self.successors: dict[Label, LtsNode] = {}
         self.parent: LtsNode | None = parent
         self.incomming_transition_label = incomming_transition_label
         self.is_complete:bool = False
+        self.is_stable = is_stable
 
     def extend_and_get(self, label: Label) -> 'LtsNode':
         if label not in self.successors:
-            child = LtsNode(parent=self, incomming_transition_label=label)
-            self.successors[label] = child
+            if label == QUIESCENCE:
+                if self.is_stable:
+                    self.successors[label] = self
+                else:
+                    child = LtsNode(parent=self, incomming_transition_label=label, is_stable=True)
+                    self.successors[label] = child
+            else:
+                child = LtsNode(parent=self, incomming_transition_label=label)
+                self.successors[label] = child
 
         return self.successors[label]
 
