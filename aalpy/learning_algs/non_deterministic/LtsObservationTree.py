@@ -208,7 +208,10 @@ class LtsObservationTree:
         fired = False
         for basis_node in self.basis:
             if not basis_node.is_complete:
-                self.check_complete_output(basis_node)
+                b = False
+                while not b:
+                    b = self.check_complete_output(basis_node)
+                
                 fired = True
 
         return fired

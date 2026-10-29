@@ -257,6 +257,76 @@ class LtsObservationTreeTest(unittest.TestCase):
         self.assertIsNotNone(self.root.get_successor(In('coin')))
         self.assertIsNotNone(self.root.get_successor(Out('coffee')))
 
+    def test_find_candidates_and_identifier(self):
+        self.ob_tree.insert_observation([Out(QUIESCENCE)])
+        self.root.mark_complete()
+        self.ob_tree.insert_observation([In('coin'), Out('coffee')])
+        self.ob_tree.insert_observation([In('coin'), Out('tea')])
+
+        self.ob_tree.promotion_rule()
+        self.ob_tree.completion_rule()
+
+        self.ob_tree.insert_observation([In('coin')] * 2 + [Out('coffee')])
+        self.ob_tree.insert_observation([In('coin')] * 2 + [Out('tea')])
+
+        q = self.ob_tree.tree_after([In('coin')])
+        r = self.ob_tree.tree_after([In('coin')] * 2)
+
+        assert q is not None
+        assert r is not None
+
+        self.assertEqual(self.ob_tree.find_candidates(r), set([q]))
+        self.assertEqual(self.ob_tree.find_identifier(r), q)
+
+    def test_find_no_identifier_multiple_candidates(self):
+        self.ob_tree.insert_observation([Out(QUIESCENCE)])
+        self.root.mark_complete()
+        self.ob_tree.insert_observation([In('coin'), Out('coffee')])
+        self.ob_tree.insert_observation([In('coin'), Out('tea')])
+
+        self.ob_tree.promotion_rule()
+        self.ob_tree.completion_rule()
+
+        self.ob_tree.insert_observation([In('coin')] * 2 + [Out('coffee')])
+
+        q = self.ob_tree.tree_after([In('coin')])
+        r = self.ob_tree.tree_after([In('coin')] * 2)
+
+        assert q is not None
+        assert r is not None
+
+        r.mark_complete()
+
+        self.ob_tree.promotion_rule()
+
+        self.assertEqual(self.ob_tree.basis, set([self.root, q, r]))
+
+        self.ob_tree.insert_observation([In('coin')] * 3 + [Out('coffee')])
+
+        p = self.ob_tree.tree_after([In('coin')] * 3)
+
+        assert p is not None
+
+        self.assertEqual(self.ob_tree.find_candidates(p), set([q, r]))
+        self.assertIsNone(self.ob_tree.find_identifier(p))
+
+    def test_basis_state_identifies_itself(self):
+        self.assertEqual(self.ob_tree.find_identifier(self.root), self.root)
+        self.ob_tree.insert_observation([In('coin')])
+        self.assertEqual(self.ob_tree.find_candidates(self.root), set([self.root]))
+
+    def test_find_no_identifier_no_candidates(self):
+        self.ob_tree.insert_observation([QUIESCENCE])
+        self.ob_tree.insert_observation([In('coin'), Out('coffee')])
+        self.root.mark_complete()
+
+        q = self.ob_tree.tree_after([In('coin')])
+
+        assert q is not None
+
+        self.assertSetEqual(self.ob_tree.find_candidates(q), set())
+        self.assertIsNone(self.ob_tree.find_identifier(q))
+
 
     def test_extension_enabled_and_not_enabled(self):
         self.ob_tree.insert_observation([QUIESCENCE])
@@ -363,6 +433,35 @@ class LtsObsercationTreeRules(unittest.TestCase):
         b_prime = self.ob_tree.extension_rule()
 
         self.assertFalse(b_prime)
+
+    def test_promotion_rule(self):
+        self.ob_tree.insert_observation([QUIESCENCE])
+        self.root.mark_complete()
+        self.ob_tree.insert_observation([In('coin'), Out('coffee')])
+        
+        q = self.ob_tree.tree_after([In('coin')])
+
+        assert q is not None
+
+        self.assertEqual(self.ob_tree.basis, set([self.root]))
+
+        self.ob_tree.promotion_rule()
+
+        self.assertEqual(self.ob_tree.basis, set([self.root, q]))
+
+    def test_completion_rule(self):
+        self.test_promotion_rule()
+
+        self.ob_tree.completion_rule()
+
+        q = self.ob_tree.tree_after([In('coin')])
+
+        assert q is not None
+
+        self.assertTrue(q.is_complete)
+        self.assertEqual(q.outputs(), set([Out('coffee'), Out('tea')]))
+
+    
 
 
 class LtsObservationTreeBuildHypothesis(unittest.TestCase):
