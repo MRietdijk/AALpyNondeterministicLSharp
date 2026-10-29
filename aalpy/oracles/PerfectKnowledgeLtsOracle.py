@@ -4,7 +4,7 @@ from aalpy.base.LtsSUL import LtsSUL
 from collections import deque
 from random import choice
 
-class PerfectKnowledgeCompletenessOracle(LtsOracle):
+class PerfectKnowledgeLtsOracle(LtsOracle):
 
     def __init__(self, input_alphabet: list[In], sul: LtsSUL, model_under_learning: Lts) -> None:
         super().__init__(input_alphabet, sul)

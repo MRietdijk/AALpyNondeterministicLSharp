@@ -14,4 +14,4 @@ from .WpMethodEqOracle import RandomWpMethodEqOracle, WpMethodEqOracle
 from .PacOracle import PacOracle
 from .ProvidedSequencesOracleWrapper import ProvidedSequencesOracleWrapper
 from .PerfectKnowledgeEqOracle import PerfectKnowledgeEqOracle
-from .PerfectKnowledgeLtsOracle import PerfectKnowledgeCompletenessOracle
+from .PerfectKnowledgeLtsOracle import PerfectKnowledgeLtsOracle

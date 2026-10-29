@@ -2,6 +2,7 @@ from aalpy.automata.Lts import Label, Out, In, Lts, Trace, QUIESCENCE, Suspensio
 from random import choice
 from itertools import combinations
 from aalpy.base.LtsOracle import LtsOracle
+from aalpy.SULs.LtsAutomatonSUL import LtsAutomatonSUL
 
 from collections import deque
 class LtsNode:
@@ -12,23 +13,21 @@ class LtsNode:
 
     _id_counter = 0
 
-    def __init__(self, parent: 'LtsNode | None' = None, incomming_transition_label: Label | None = None, is_stable: bool = False) -> None:
+    def __init__(self, parent: 'LtsNode | None' = None, incomming_transition_label: Label | None = None, is_stable: bool = False, is_complete: bool = False) -> None:
         LtsNode._id_counter += 1
         self.id: int = LtsNode._id_counter
         self.successors: dict[Label, LtsNode] = {}
         self.parent: LtsNode | None = parent
         self.incomming_transition_label = incomming_transition_label
-        self.is_complete:bool = False
+        self.is_complete:bool = is_complete
         self.is_stable = is_stable
 
     def extend_and_get(self, label: Label) -> 'LtsNode':
         if label not in self.successors:
             if label == QUIESCENCE:
-                if self.is_stable:
-                    self.successors[label] = self
-                else:
-                    child = LtsNode(parent=self, incomming_transition_label=label, is_stable=True)
+                    child = LtsNode(parent=self, incomming_transition_label=label, is_stable=True, is_complete=True)
                     self.successors[label] = child
+                    child.successors[label] = child
             else:
                 child = LtsNode(parent=self, incomming_transition_label=label)
                 self.successors[label] = child
@@ -63,6 +62,10 @@ class LtsNode:
 
         common_extensions = set(self.successors.keys()) & set(node.successors.keys())
 
+        # because we otherwise will not terminate while searching for a counter example.
+        if self.is_stable and node.is_stable:
+            common_extensions = common_extensions - {QUIESCENCE}
+
         for extension in common_extensions:
             child_node_1 = self.successors[extension]
             child_node_2 = node.successors[extension]
@@ -79,11 +82,15 @@ class LtsNode:
     def is_apart_from(self, node: 'LtsNode') -> bool:
         return self.get_witness(node) != None
 
+    def __repr__(self):
+        return f"LtsNode({self.id}, {list(self.successors)})"
+
+
 
 class LtsObservationTree:
 
-    def __init__(self, input_labels: set[In], sul: Lts, oracle: LtsOracle) -> None:
-        self.sul: Lts = sul
+    def __init__(self, input_labels: set[In], sul: LtsAutomatonSUL, oracle: LtsOracle) -> None:
+        self.sul = sul
         self.input_labels: set[In] = input_labels
         self.oracle = oracle
         self.root = LtsNode()
@@ -169,8 +176,9 @@ class LtsObservationTree:
                 new_node = node.extend_and_get(label)
                 return self.do(new_node, rest)
 
-    def promotion_rule(self) -> None:
+    def promotion_rule(self) -> bool:
         frontier_nodes = self.get_frontier()
+        fired = False
 
         for frontier_node in frontier_nodes:
             apartness_dict = dict.fromkeys(self.basis, False)
@@ -180,18 +188,30 @@ class LtsObservationTree:
 
             if all(apartness_dict.values()):
                 self.basis.add(frontier_node)
+                fired = True
 
-    def extension_rule(self) -> None:  
+        return fired
+
+
+    def extension_rule(self) -> bool:  
+        fired = False
         for basis_node in self.basis:
             inputs = basis_node.inputs()
             for i in self.input_labels - inputs:
                 basis_node.extend_and_get(i)
+                fired = True
+
+        return fired
                 
 
-    def completion_rule(self) -> None:
+    def completion_rule(self) -> bool:
+        fired = False
         for basis_node in self.basis:
             if not basis_node.is_complete:
                 self.check_complete_output(basis_node)
+                fired = True
+
+        return fired
                 
     def find_candidates(self, node: LtsNode) -> set[LtsNode]:
         candidates = set()
@@ -201,7 +221,8 @@ class LtsObservationTree:
 
         return candidates
 
-    def identification_rule(self) -> None:
+    def identification_rule(self) -> bool:
+        fired = False
         for frontier_node in self.get_frontier():
             candidates = self.find_candidates(frontier_node)
 
@@ -211,6 +232,9 @@ class LtsObservationTree:
                     raise AssertionError(f"{r1} and {r2} are in the basis, but are not apart from each other")
 
                 self.do(frontier_node, witness)
+                fired = True
+
+        return fired
 
     def find_identifier(self, node: LtsNode) -> LtsNode | None:
         candidates = self.find_candidates(node)
@@ -219,7 +243,8 @@ class LtsObservationTree:
         else:
             return None
 
-    def stable_rule(self) -> None:
+    def stable_rule(self) -> bool:
+        fired = False
         for q in self.basis:
             r = q.get_successor(QUIESCENCE)
             if r is None:
@@ -241,6 +266,9 @@ class LtsObservationTree:
                 continue
 
             self.do(r, witness)
+            fired = True
+
+        return fired
 
     def build_hypothesis(self) -> SuspensionAutomaton:
         tree_node_to_state: dict[LtsNode, LtsState] = dict()
@@ -344,7 +372,8 @@ class LtsObservationTree:
 
         return None
 
-    def quiescent_reducible_rule(self, hypothesis: SuspensionAutomaton) -> None:
+    def quiescent_reducible_rule(self, hypothesis: SuspensionAutomaton) -> bool:
+        fired = False
         for q in hypothesis.states:
             if QUIESCENCE not in q.outputs():
                 continue
@@ -363,6 +392,9 @@ class LtsObservationTree:
                 self.process_counter_example(hypothesis, access_q + sigma)
             else:
                 self.process_counter_example(hypothesis, access_q + [QUIESCENCE] + sigma)
+            fired = True
+
+        return fired
 
     def equivalence_rule(self, hypothesis: SuspensionAutomaton) -> bool:
         counter_example = self.oracle.find_cex(hypothesis)
@@ -371,3 +403,4 @@ class LtsObservationTree:
             return True
 
         self.process_counter_example(hypothesis, counter_example)
+        return False

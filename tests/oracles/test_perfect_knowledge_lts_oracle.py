@@ -1,7 +1,7 @@
 import unittest
 
 from aalpy.automata.Lts import Lts, SuspensionAutomaton, In, Out, QUIESCENCE
-from aalpy.oracles import PerfectKnowledgeCompletenessOracle
+from aalpy.oracles import PerfectKnowledgeLtsOracle
 from aalpy.SULs import LtsAutomatonSUL
 
 
@@ -41,7 +41,7 @@ def coffee_machine_sa_wrong_quiescence():
 
 def make_oracle():
     model = coffee_machine()
-    return PerfectKnowledgeCompletenessOracle(model.get_input_alphabet(), LtsAutomatonSUL(model), model)
+    return PerfectKnowledgeLtsOracle(model.get_input_alphabet(), LtsAutomatonSUL(model), model)
 
 
 class LtsQuiescenceTests(unittest.TestCase):
