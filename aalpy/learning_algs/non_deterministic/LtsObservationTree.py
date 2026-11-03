@@ -286,6 +286,12 @@ class LtsObservationTree:
                 if successor is None:
                     raise AssertionError(f"Not all basis states are input-enabled: {label} is not enabled in {basis_node.id}")
 
+                if successor not in self.basis:
+                    identifier = self.find_identifier(successor)
+                    if identifier is None:
+                        raise AssertionError(f"Frontier node {successor.id} is not identified with a unique basis node")
+                    successor = identifier
+
                 state.transitions[label] = [tree_node_to_state[successor]]
 
         for node, state in tree_node_to_state.items():
@@ -296,11 +302,12 @@ class LtsObservationTree:
     def __prefix_to_frontier(self, trace: Trace):
         prefix = []
         current_node = self.root
-        frontier = self.get_frontier()
         for label in trace:
-            if current_node in frontier or current_node is None:
+            # the first node on the trace outside the basis is a frontier node
+            if current_node is None or current_node not in self.basis:
                 break
 
+            prefix.append(label)
             current_node = current_node.get_successor(label)
 
         return prefix
