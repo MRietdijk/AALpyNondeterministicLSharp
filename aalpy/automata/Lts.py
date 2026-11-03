@@ -55,9 +55,12 @@ TAU = Tau()
 # Symbol used for TAU in state setup dictionaries, written as the key (TAU_SYMBOL, None).
 TAU_SYMBOL = "τ"
 
-# A label is an input In(sym), an output Out(sym) or the internal label TAU.
-Label: TypeAlias = In[InputType] | Out[OutputType] | Tau
+# An observable label is either an input In(sym) or an output Out(sym). Traces only contain observable labels.
+Label: TypeAlias = In[InputType] | Out[OutputType]
 Trace: TypeAlias = list[Label]
+
+# A transition label is an observable label or the internal label TAU.
+TransitionLabel: TypeAlias = Label | Tau
 
 class LtsState(AutomatonState, Generic[InputType, OutputType]):
     """
@@ -68,7 +71,7 @@ class LtsState(AutomatonState, Generic[InputType, OutputType]):
     def __init__(self, state_id: Hashable) -> None:
         super().__init__(state_id)
 
-        self.transitions: dict[Label, list[LtsState[InputType, OutputType]]] = {}
+        self.transitions: dict[TransitionLabel, list[LtsState[InputType, OutputType]]] = {}
 
     def inputs(self) -> set[In[InputType]]:
         return {label for label in self.transitions if isinstance(label, In)}
@@ -76,7 +79,7 @@ class LtsState(AutomatonState, Generic[InputType, OutputType]):
     def outputs(self) -> set[Out[OutputType]]:
         return {label for label in self.transitions if isinstance(label, Out)}
 
-    def successor_states(self, label: Label) -> list['LtsState[InputType, OutputType]']:
+    def successor_states(self, label: TransitionLabel) -> list['LtsState[InputType, OutputType]']:
         return self.transitions.get(label, [])
 
     def add_input(self, inp: InputType, target: 'LtsState[InputType, OutputType]') -> None:
@@ -231,11 +234,11 @@ class Lts(Automaton[LtsState[InputType, OutputType]]):
         return state_setup_dict
 
     @staticmethod
-    def _setup_key(label: Label) -> tuple:
+    def _setup_key(label: TransitionLabel) -> tuple:
         """
         Returns the state setup key of a label: ('?', sym), ('!', sym), ('!', QUIESCENCE_SYMBOL) or (TAU_SYMBOL, None).
         """
-        if label == TAU:
+        if isinstance(label, Tau):
             return TAU_SYMBOL, None
         if label == QUIESCENCE:
             return '!', QUIESCENCE_SYMBOL
