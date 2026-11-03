@@ -14,7 +14,7 @@ def coffee_machine():
     })
 
 def coffee_or_tea_choice_machine():
-    """After a coin the machine non-deterministically serves coffee (to new state s2) or tea (to new state s3) afterwards, the observed output is only observed after throwing in coins"""
+    """After a coin, the machine non-deterministically serves coffee (to new state s2) or tea (to new state s3) afterwards, the observed output is only observed after throwing in coins"""
     return Lts.from_state_setup({
         's0': {('?', 'coin'): ['s1']},
         's1': {('?', 'coin'): ['s1'], ('!', 'coffee'): ['s2'], ('!', 'tea'): ['s3']},
@@ -22,6 +22,14 @@ def coffee_or_tea_choice_machine():
         's3': {('?', 'coin'): ['s5']},
         's4': {('!', 'coffee'): ['s2'], ('?', 'coin'): ['s4']},
         's5': {('!', 'tea'): ['s3'], ('?', 'coin'): ['s5']},
+    })
+
+def non_observable_non_deterministic_coffee_machine():
+    """After a coin, the machine non-deterministically chooses to stop reacting (i.e. only quiescence to observe), or serves coffee or tea"""
+    return Lts.from_state_setup({
+        's0': {('?', 'coin'): ['s1', 's2']},
+        's1': {('?', 'coin'): ['s1']},
+        's2': {('?', 'coin'): ['s2'], ('!', 'coffee'): ['s0'], ('!', 'tea'): ['s0']}
     })
 
 class LtsObservationTreeTest(unittest.TestCase):
@@ -335,12 +343,15 @@ class LtsObservationTreeTest(unittest.TestCase):
         self.assertFalse(self.root.is_enabled(In('coin')))
 
 class LtsObservationTreeOracleUsesTest(unittest.TestCase):
-    def setUp(self) -> None:
-        self.model: Lts = coffee_machine()
+    def _init_with(self, model: Lts) -> None:
+        self.model: Lts = model
         self.sul = LtsAutomatonSUL(self.model)
         self.oracle = PerfectKnowledgeLtsOracle(self.model.get_input_alphabet(), self.sul, self.model)
         self.ob_tree = LtsObservationTree(set(self.model.get_input_alphabet()), self.sul, self.oracle)
         self.root = self.ob_tree.root
+
+    def setUp(self) -> None:
+        self._init_with(coffee_machine())
 
     def test_check_complete_output(self):
         b = self.ob_tree.check_complete_output(self.root)
@@ -414,13 +425,34 @@ class LtsObservationTreeOracleUsesTest(unittest.TestCase):
         self.assertTrue(b)
         self.assertTrue(q.is_complete)
 
+    def test_do_non_observable_non_determinism(self):
+        self._init_with(non_observable_non_deterministic_coffee_machine())
+
+        trace: Trace = [In('coin')]
+
+        self.ob_tree.insert_observation(trace)
+
+        q_1 = self.ob_tree.tree_after(trace)
+
+        assert q_1 is not None
+
+        b = self.ob_tree.do(q_1, [Out('cappuchino')])
+
+        self.assertFalse(b)
+        self.assertEqual(q_1.outputs(), set([Out('coffee'), Out('tea'), QUIESCENCE]))
+        self.assertTrue(q_1.is_complete)
+
+
 class LtsObsercationTreeRules(unittest.TestCase):
-    def setUp(self) -> None:
-        self.model: Lts = coffee_machine()
+    def _init_with(self, model: Lts) -> None:
+        self.model: Lts = model
         self.sul = LtsAutomatonSUL(self.model)
         self.oracle = PerfectKnowledgeLtsOracle(self.model.get_input_alphabet(), self.sul, self.model)
         self.ob_tree = LtsObservationTree(set(self.model.get_input_alphabet()), self.sul, self.oracle)
         self.root = self.ob_tree.root
+        
+    def setUp(self) -> None:
+        self._init_with(coffee_machine())
 
     def test_extension_rule(self):
         b = self.ob_tree.extension_rule()
@@ -461,6 +493,99 @@ class LtsObsercationTreeRules(unittest.TestCase):
         self.assertTrue(q.is_complete)
         self.assertEqual(q.outputs(), set([Out('coffee'), Out('tea')]))
 
+    def test_identification_rule_completing_a_node(self):
+        self.test_promotion_rule()
+
+        self.ob_tree.insert_observation([In('coin'), In('coin')])
+
+        b = self.ob_tree.identification_rule()
+
+        self.assertTrue(b)
+        q_0 = self.root
+        q_1 = self.ob_tree.tree_after([QUIESCENCE])
+        q_2 = self.ob_tree.tree_after([In('coin')])
+        q_3 = self.ob_tree.tree_after([In('coin'), Out('coffee')])
+        q_4 = self.ob_tree.tree_after([In('coin')] * 2)
+
+        assert q_1 is not None
+        assert q_2 is not None
+        assert q_3 is not None
+        assert q_4 is not None
+
+        self.assertEqual(self.ob_tree.find_identifier(q_4), q_2)
+        self.assertEqual(self.ob_tree.find_identifier(q_3), q_0)
+        self.assertEqual(self.ob_tree.find_identifier(q_1), q_0)
+
+        self.assertLessEqual(q_4.outputs(), set([Out('coffee'), Out('tea')]))
+        self.assertEqual(q_3.outputs(), set([QUIESCENCE]))
+
+    def test_identifying_a_quiescent_state_which_has_outputs_enabled(self):
+        self._init_with(non_observable_non_deterministic_coffee_machine())
+
+        quiescent_trace = [In('coin'), QUIESCENCE]
+        tea_trace = [In('coin'), Out('tea')]
+        coffee_trace = [In('coin'), Out('coffee')]
+        
+        
+        self.ob_tree.insert_observation([QUIESCENCE])
+        self.ob_tree.insert_observation(quiescent_trace)
+        self.ob_tree.insert_observation(tea_trace)
+        self.ob_tree.insert_observation(coffee_trace)
+
+        q_0 = self.root
+        q_1 = self.ob_tree.tree_after([In('coin')])
+        q_2 = self.ob_tree.tree_after(quiescent_trace)
+        q_3 = self.ob_tree.tree_after(tea_trace)
+        q_4 = self.ob_tree.tree_after(coffee_trace)
+
+        assert q_1 is not None
+        assert q_2 is not None
+        assert q_3 is not None
+        assert q_4 is not None
+
+        self.ob_tree.completion_rule()
+        self.ob_tree.promotion_rule()
+
+        self.assertIn(q_1, self.ob_tree.basis)
+
+        self.ob_tree.identification_rule()
+
+        self.assertEqual(q_2.outputs(), set([QUIESCENCE]))
+        self.assertEqual(q_3.outputs(), set([QUIESCENCE]))
+        self.assertEqual(q_4.outputs(), set([QUIESCENCE]))
+
+
+    def test_identification_rule_not_completing_a_node(self):
+        self.ob_tree.insert_observation([QUIESCENCE])
+        self.ob_tree.insert_observation([In('coin'), Out('tea')])
+        self.ob_tree.insert_observation([In('coin'), Out('coffee')])
+        self.ob_tree.insert_observation([In('coin')] * 2)
+
+        q_0 = self.root
+        q_2 = self.ob_tree.tree_after([In('coin')])
+        q_3 = self.ob_tree.tree_after([In('coin'), Out('coffee')])
+        q_4 = self.ob_tree.tree_after([In('coin'), Out('tea')])
+        q_5 = self.ob_tree.tree_after([In('coin')] * 2)
+
+        assert q_2 is not None
+        assert q_3 is not None
+        assert q_4 is not None
+        assert q_5 is not None
+        
+        q_2.mark_complete()
+        self.ob_tree.promotion_rule()
+        self.ob_tree.identification_rule()
+
+        self.assertLessEqual(q_5.outputs(), set([Out('coffee'), Out('tea')]))
+        self.assertEqual(self.ob_tree.find_identifier(q_5), q_2)
+        self.assertEqual(q_3.outputs(), set([QUIESCENCE]))
+        self.assertEqual(q_4.outputs(), set([QUIESCENCE]))
+        self.assertEqual(self.ob_tree.find_identifier(q_3), q_0)
+        self.assertEqual(self.ob_tree.find_identifier(q_4), q_0)
+
+
+
+
     
 
 
@@ -474,8 +599,7 @@ class LtsObservationTreeBuildHypothesis(unittest.TestCase):
 
     def test_assumption_all_states_are_input_enabled(self):
         self.assertRaises(AssertionError, self.ob_tree.build_hypothesis)
-
-    # def 
+ 
 
 
 
