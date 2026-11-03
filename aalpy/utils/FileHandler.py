@@ -10,6 +10,7 @@ from pydot import Dot, Node, Edge
 from aalpy.automata import Dfa, MooreMachine, Mdp, Onfsm, MealyState, DfaState, MooreState, MealyMachine, \
     MdpState, StochasticMealyMachine, StochasticMealyState, OnfsmState, MarkovChain, McState, Sevpa, SevpaState, \
     SevpaTransition, Vpa, VpaState, VpaTransition, NDMooreMachine, NDMooreState, Lts, LtsState
+from aalpy.automata.Lts import TAU_SYMBOL
 
 file_types = ['dot', 'png', 'svg', 'pdf', 'string']
 automaton_types = {Dfa: 'dfa', MealyMachine: 'mealy', MooreMachine: 'moore', Mdp: 'mdp',
@@ -267,12 +268,14 @@ def _process_label(label: str, source: Any, destination: Any, automaton_type: st
     if automaton_type == 'lts':
         kind, sym = label[0], label[1:]
         sym = int(sym) if sym.isdigit() else sym
-        if kind == '?':
+        if label == TAU_SYMBOL:
+            source.add_tau(destination)
+        elif kind == '?':
             source.add_input(sym, destination)
         elif kind == '!':
             source.add_output(sym, destination)
         else:
-            raise ValueError(f"LTS label '{label}' must start with '?' or '!'")
+            raise ValueError(f"LTS label '{label}' must be '{TAU_SYMBOL}' or start with '?' or '!'")
     if automaton_type == 'mc':
         prob = label
         source.transitions.append((destination, float(prob)))

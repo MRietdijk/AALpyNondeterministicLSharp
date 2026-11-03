@@ -40,8 +40,23 @@ QUIESCENCE: Out[Quiescence] = Out(Quiescence())
 # Symbol used for QUIESCENCE in state setup dictionaries.
 QUIESCENCE_SYMBOL = "δ"
 
-# A label is either an input In(sym) or an output Out(sym).
-Label: TypeAlias = In[InputType] | Out[OutputType]
+
+@dataclass(frozen=True)
+class Tau:
+    """Label of an internal, unobservable transition τ."""
+
+    def __str__(self) -> str:
+        return TAU_SYMBOL
+
+
+# Label of internal transitions. It is never observed: traces only contain inputs and outputs.
+TAU = Tau()
+
+# Symbol used for TAU in state setup dictionaries, written as the key (TAU_SYMBOL, None).
+TAU_SYMBOL = "τ"
+
+# A label is an input In(sym), an output Out(sym) or the internal label TAU.
+Label: TypeAlias = In[InputType] | Out[OutputType] | Tau
 Trace: TypeAlias = list[Label]
 
 class LtsState(AutomatonState, Generic[InputType, OutputType]):
@@ -70,6 +85,13 @@ class LtsState(AutomatonState, Generic[InputType, OutputType]):
     def add_output(self, out: OutputType, target: 'LtsState[InputType, OutputType]') -> None:
         self.transitions.setdefault(Out(out), []).append(target)
 
+    def add_tau(self, target: 'LtsState[InputType, OutputType]') -> None:
+        self.transitions.setdefault(TAU, []).append(target)
+
+    def is_quiescent(self) -> bool:
+        """A state is quiescent if it enables no output and no internal transition."""
+        return not self.outputs() and TAU not in self.transitions
+
     
 class Lts(Automaton[LtsState[InputType, OutputType]]):
     """
@@ -84,39 +106,52 @@ class Lts(Automaton[LtsState[InputType, OutputType]]):
         If letter is an input label: take that input transition (non-deterministically) and return None.
         If letter is None: let the system produce an output. Picks one enabled output at random,
         moves to one of the successors of that enabled output and returns its label;
-        returns QUIESCENCE and stays in the current state if no output is enabled.
+        returns QUIESCENCE and stays in a quiescent state if no output is enabled.
+        Internal transitions are taken silently, before and after the input or output.
         """
         if letter is not None:
-            targets = self.current_state.successor_states(letter)
+            targets = list(self.after_states({self.current_state}, [letter]))
             if not targets:
                 raise ValueError(f"input {letter} is not enabled in {self.current_state.state_id}")
             self.current_state = choice(targets)
             return None
 
-        output = choice(list(self._enabled_outputs(self.current_state)))
+        output = choice(list(self.out({self.current_state})))
 
-        self.current_state = choice(self._successors(self.current_state, output))
+        self.current_state = choice(list(self.after_states({self.current_state}, [output])))
 
         return output
 
     def _enabled_outputs(self, state: LtsState[InputType, OutputType]) -> set[Out[OutputType] | Out[Quiescence]]:
         """
-        Returns the outputs enabled in a state. Quiescence is implicit: a state without outputs enables only QUIESCENCE.
+        Returns the outputs enabled in a state. Quiescence is implicit: a quiescent state enables only QUIESCENCE.
+        A state with only internal transitions enables no output itself; its τ-successors do.
         """
-        outputs: set[Out[OutputType] | Out[Quiescence]] = set(state.outputs())
-        if not outputs:
+        if state.is_quiescent():
             return {QUIESCENCE}
-        else:
-            return outputs
+        return set(state.outputs())
 
     def _successors(self, state: LtsState[InputType, OutputType], label: Label) -> list[LtsState[InputType, OutputType]]:
         """
         Returns the successors of a state for a label. QUIESCENCE is an implicit self-loop on quiescent states and leads
-        nowhere from states with outputs.
+        nowhere from other states.
         """
         if label == QUIESCENCE:
-            return [state] if not state.outputs() else []
+            return [state] if state.is_quiescent() else []
         return state.successor_states(label)
+
+    def tau_closure(self, states: set[LtsState[InputType, OutputType]]) -> set[LtsState[InputType, OutputType]]:
+        """
+        Returns the states reachable from the given states with zero or more internal transitions.
+        """
+        closure = set(states)
+        stack = list(states)
+        while stack:
+            for successor in stack.pop().successor_states(TAU):
+                if successor not in closure:
+                    closure.add(successor)
+                    stack.append(successor)
+        return closure
 
     def get_input_alphabet(self) -> list[In[InputType]]:
         """
@@ -130,8 +165,11 @@ class Lts(Automaton[LtsState[InputType, OutputType]]):
         return alphabet
 
     def is_input_complete(self) -> bool:
+        """
+        Checks that every input is enabled in every state, possibly after internal transitions.
+        """
         input_alphabet = set(self.get_input_alphabet())
-        return all(s.inputs() == input_alphabet for s in self.states)
+        return all(set().union(*(q.inputs() for q in self.tau_closure({s}))) == input_alphabet for s in self.states)
 
     def get_output_alphabet(self) -> list[Out[OutputType]]:
         """
@@ -147,43 +185,39 @@ class Lts(Automaton[LtsState[InputType, OutputType]]):
     def out(self, states: set[LtsState[InputType, OutputType]]) -> set[Out[OutputType] | Out[Quiescence]]:
         """
         Returns the enabled outputs for a set of states, including QUIESCENCE if any state is quiescent.
+        States reachable with internal transitions are included.
         """
         outputs = set()
 
-        for state in states:
+        for state in self.tau_closure(states):
             outputs |= self._enabled_outputs(state)
 
         return outputs
 
     def after_states(self, states: set[LtsState], trace: Trace) -> set[LtsState]:
-        resulting_states: set[LtsState] = set()
-        for state in states:
-            resulting_states = resulting_states | (self.after(state, trace))
+        """
+        Given a set of states in the LTS and a trace, we return the set of states were we can end up from these states
+        after sigma, taking internal transitions before and after every label. The result is closed under τ.
+        """
+        current = self.tau_closure(states)
+        for label in trace:
+            current = self.tau_closure({successor for state in current for successor in self._successors(state, label)})
 
-        return resulting_states
+        return current
 
     def after(self, state: LtsState[InputType, OutputType], trace: Trace) -> set[LtsState[InputType, OutputType]]:
         """
-        Given a state in the LTS and a trace, we return the set of states were 
+        Given a state in the LTS and a trace, we return the set of states were
         we can end up from the given state after sigma
         """
-        states = set()
-        if trace == []:
-            states.add(state)
-        else:
-            current_label = trace[0]
-            new_trace = trace[1:]
-            for successor in self._successors(state, current_label):
-                states = states | self.after(successor, new_trace)
-
-        return states
+        return self.after_states({state}, trace)
 
     def to_state_setup(self) -> dict:
         """
         Converts the LTS to a state setup dictionary. The initial state is the first entry.
 
         :return dict: Map from state_id to a dict mapping (label_type_value, symbol) to a list of target state_ids,
-            e.g. {'s0': {('?', 'coin'): ['s1']}, 's1': {('!', 'coffee'): ['s0']}}.
+            e.g. {'s0': {('?', 'coin'): ['s1']}, 's1': {('!', 'coffee'): ['s0'], ('τ', None): ['s0']}}.
         """
         state_setup_dict = {}
 
@@ -191,18 +225,27 @@ class Lts(Automaton[LtsState[InputType, OutputType]]):
         ordered_states = [self.initial_state] + [s for s in self.states if s != self.initial_state]
 
         for s in ordered_states:
-            state_setup_dict[s.state_id] = {('?' if isinstance(label, In) else '!',
-                                             QUIESCENCE_SYMBOL if label == QUIESCENCE else label.sym):
-                                                [target.state_id for target in targets]
+            state_setup_dict[s.state_id] = {Lts._setup_key(label): [target.state_id for target in targets]
                                             for label, targets in s.transitions.items()}
 
         return state_setup_dict
 
     @staticmethod
+    def _setup_key(label: Label) -> tuple:
+        """
+        Returns the state setup key of a label: ('?', sym), ('!', sym), ('!', QUIESCENCE_SYMBOL) or (TAU_SYMBOL, None).
+        """
+        if label == TAU:
+            return TAU_SYMBOL, None
+        if label == QUIESCENCE:
+            return '!', QUIESCENCE_SYMBOL
+        return '?' if isinstance(label, In) else '!', label.sym
+
+    @staticmethod
     def _states_from_setup(state_setup: dict) -> tuple[LtsState, list[LtsState]]:
         """
         Builds the states of a state setup dictionary, returning the initial state and all states.
-        The output symbol QUIESCENCE_SYMBOL is mapped to QUIESCENCE.
+        The output symbol QUIESCENCE_SYMBOL is mapped to QUIESCENCE and the kind TAU_SYMBOL to TAU.
         """
         states_map = {key: LtsState(key) for key in state_setup.keys()}
 
@@ -210,7 +253,9 @@ class Lts(Automaton[LtsState[InputType, OutputType]]):
             source = states_map[key]
             for (kind, sym), targets in transitions.items():
                 for target in targets:
-                    if kind == '?':
+                    if kind == TAU_SYMBOL:
+                        label = TAU
+                    elif kind == '?':
                         label = In(sym)
                     else:
                         label = QUIESCENCE if sym == QUIESCENCE_SYMBOL else Out(sym)
@@ -225,7 +270,8 @@ class Lts(Automaton[LtsState[InputType, OutputType]]):
         Creates an LTS from a state setup dictionary. The first state in the state setup is the initial state.
 
         :param dict state_setup: Map from state_id to a dict mapping (label_type_value, symbol) to a list of
-            target state_ids, where label_type_value is '?' for inputs and '!' for outputs.
+            target state_ids, where label_type_value is '?' for inputs and '!' for outputs. Internal transitions
+            are written as (TAU_SYMBOL, None).
         :return Lts: The constructed LTS.
         """
         return Lts(*Lts._states_from_setup(state_setup))
@@ -248,10 +294,12 @@ class SuspensionAutomaton(Lts):
 
     def validate(self) -> None:
         """
-        Checks that every state enables at least one output (QUIESCENCE counts) and that the automaton is deterministic.
-        Raises a ValueError otherwise.
+        Checks that every state enables at least one output (QUIESCENCE counts) and that the automaton is deterministic,
+        so in particular has no internal transitions. Raises a ValueError otherwise.
         """
         for state in self.states:
+            if TAU in state.transitions:
+                raise ValueError(f"state {state.state_id} has an internal transition {TAU}")
             if not state.outputs():
                 raise ValueError(f"state {state.state_id} enables no output, not even {QUIESCENCE}")
             for label, targets in state.transitions.items():

@@ -35,7 +35,8 @@ class PerfectKnowledgeLtsOracle(LtsOracle):
         model = self.model_under_learning
         self.num_queries += 1
 
-        start = (frozenset({hypothesis.initial_state}), frozenset({model.initial_state}))
+        start = (frozenset(hypothesis.after(hypothesis.initial_state, [])),
+                 frozenset(model.after(model.initial_state, [])))
         visited = {start}
         queue: deque[tuple[frozenset, frozenset, Trace]] = deque([(start[0], start[1], [])])
 

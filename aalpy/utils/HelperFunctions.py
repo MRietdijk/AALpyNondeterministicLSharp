@@ -2,7 +2,7 @@
 import random
 import string
 from itertools import product
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import Any, Callable, List
 
 from aalpy import Mdp, MarkovChain, McState, MealyMachine, MooreMachine, Dfa, DfaState
@@ -661,6 +661,36 @@ def mc_from_mdp(mdp: Mdp, input_symbol: Any = None) -> MarkovChain:
 
     initial_state = state_map[mdp.initial_state.state_id]
     return MarkovChain(initial_state, list(state_map.values()))
+
+def suspension_automaton_from_lts(lts: Any) -> Any:
+    """
+    Converts an IOTS to its suspension automaton Γ(Δ(s)) (Janssen & Tretmans 2019, Def. 2.3 and 6.2): quiescent
+    states get a δ self-loop (deltafication) and the result is determinized by the subset construction. Only reachable
+    subsets become states. Internal transitions are removed: every state is a τ-closed set of states of lts.
+
+    :param Lts lts: LTS to convert, with quiescence implicit.
+    :return SuspensionAutomaton: The suspension automaton, whose traces are the suspension traces of lts.
+    """
+    from aalpy.automata.Lts import LtsState, SuspensionAutomaton
+
+    # Lts.out and Lts.after_states already treat QUIESCENCE as a self-loop on quiescent states, i.e. they act on Δ(s),
+    # and return τ-closed sets, so inputs of the states in such a set are the weakly enabled inputs
+    start = frozenset(lts.after(lts.initial_state, []))
+    state_map = {start: LtsState('s0')}
+    queue = deque([start])
+    while queue:
+        states = queue.popleft()
+        labels = set().union(*(s.inputs() for s in states)) | lts.out(set(states))
+        for label in sorted(labels, key=str):
+            successors = frozenset(lts.after_states(set(states), [label]))
+            if not successors:
+                continue
+            if successors not in state_map:
+                state_map[successors] = LtsState(f's{len(state_map)}')
+                queue.append(successors)
+            state_map[states].transitions[label] = [state_map[successors]]
+
+    return SuspensionAutomaton(state_map[start], list(state_map.values()))
 
 def mc_format_to_mdp(data: list) -> list:
     """
