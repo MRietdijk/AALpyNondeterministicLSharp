@@ -1,4 +1,5 @@
 import unittest
+from itertools import combinations
 
 from aalpy.automata.Lts import Lts, In, Out, QUIESCENCE, Trace
 from aalpy.SULs.LtsAutomatonSUL import LtsAutomatonSUL
@@ -30,6 +31,14 @@ def non_observable_non_deterministic_coffee_machine():
         's0': {('?', 'coin'): ['s1', 's2']},
         's1': {('?', 'coin'): ['s1']},
         's2': {('?', 'coin'): ['s2'], ('!', 'coffee'): ['s0'], ('!', 'tea'): ['s0']}
+    })
+
+def unstable_sul():
+    return Lts.from_state_setup({
+        's0': {('?', 'a'): ['s3'], ('?', 'b'): ['s0'], ('τ', None): ['s2']},
+        's1': {('?', 'a'): ['s1'], ('?', 'b'): ['s3']},
+        's2': {('?', 'a'): ['s0'], ('?', 'b'): ['s1']},
+        's3': {('?', 'a'): ['s1'], ('?', 'b'): ['s3'], ('!', 'x'): ['s1']},
     })
 
 class LtsObservationTreeTest(unittest.TestCase):
@@ -582,6 +591,74 @@ class LtsObsercationTreeRules(unittest.TestCase):
         self.assertEqual(q_4.outputs(), set([QUIESCENCE]))
         self.assertEqual(self.ob_tree.find_identifier(q_3), q_0)
         self.assertEqual(self.ob_tree.find_identifier(q_4), q_0)
+
+    def test_stability_rule(self):
+        self._init_with(unstable_sul())
+
+        a_b_q_trace = [In('a'), In('b'), QUIESCENCE]
+        b_q_a_q_trace = [In('b'), QUIESCENCE, In('a'), QUIESCENCE]
+        b_a_x_trace = [In('b'), In('a'), Out('x')]
+        b_a_q_trace = [In('b'), In('a'), QUIESCENCE]
+        
+        self.ob_tree.insert_observation(a_b_q_trace)
+        self.ob_tree.insert_observation(b_q_a_q_trace)
+        self.ob_tree.insert_observation(b_a_x_trace)
+        self.ob_tree.insert_observation(b_a_q_trace)
+
+        q_a = self.ob_tree.tree_after([In('a')])
+        q_ab = self.ob_tree.tree_after([In('a'), In('b')])
+        r = self.ob_tree.tree_after(a_b_q_trace)
+        q_b = self.ob_tree.tree_after([In('b')])
+        r_prime = self.ob_tree.tree_after([In('b'), QUIESCENCE])
+        r_prime_a = self.ob_tree.tree_after([In('b'), QUIESCENCE, In('a')])
+
+        assert q_a is not None
+        assert q_ab is not None
+        assert r is not None
+        assert q_b is not None
+        assert r_prime is not None
+        assert r_prime_a is not None
+
+        self.ob_tree.insert_observation([QUIESCENCE, In('b'), QUIESCENCE])
+        self.ob_tree.insert_observation([In('a'), Out('x')])
+        self.ob_tree.insert_observation([In('a'), QUIESCENCE, In('b'), QUIESCENCE])
+        self.ob_tree.insert_observation([In('a'), In('b'), Out('x')])
+        self.ob_tree.insert_observation(a_b_q_trace + [In('b'), Out('x')])
+        self.ob_tree.insert_observation([In('b'), QUIESCENCE, In('b'), Out('x')])
+
+        q_0_q_b = self.ob_tree.tree_after([QUIESCENCE, In('b')])
+        q_a_q_b = self.ob_tree.tree_after([In('a'), QUIESCENCE, In('b')])
+
+        assert q_0_q_b is not None
+        assert q_a_q_b is not None
+
+        for node in [self.root, q_a, q_b, q_ab, r_prime_a, q_0_q_b, q_a_q_b]:
+            node.mark_complete()
+
+        self.ob_tree.basis = self.ob_tree.basis | {q_b, q_ab, q_a}
+
+        for p, p_prime in combinations(self.ob_tree.basis, 2):
+            self.assertTrue(p.is_apart_from(p_prime))
+
+        self.assertEqual(self.ob_tree.find_identifier(r), q_b)
+        self.assertEqual(q_b.get_witness(r_prime), [In('a'), Out('x')])
+
+        self.assertTrue(self.ob_tree.stable_rule())
+
+        r_a = self.ob_tree.tree_after(a_b_q_trace + [In('a')])
+
+        assert r_a is not None
+
+        self.assertTrue(r_a.is_complete)
+        self.assertEqual(r_a.outputs(), set([QUIESCENCE]))
+        self.assertTrue(r.is_apart_from(q_b))
+        self.assertIsNone(self.ob_tree.find_identifier(r))
+
+        self.ob_tree.promotion_rule()
+
+        self.assertTrue(r in self.ob_tree.basis or r_prime in self.ob_tree.basis)
+        self.assertFalse(r in self.ob_tree.basis and r_prime in self.ob_tree.basis)
+
 
 
 
