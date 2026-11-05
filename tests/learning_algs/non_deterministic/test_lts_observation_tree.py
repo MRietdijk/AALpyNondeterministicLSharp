@@ -363,8 +363,8 @@ class LtsObservationTreeOracleUsesTest(unittest.TestCase):
         self._init_with(coffee_machine())
 
     def test_check_complete_output(self):
-        b = self.ob_tree.check_complete_output(self.root)
-        b_prime = self.ob_tree.check_complete_output(self.root)
+        b = self.ob_tree.output_extension(self.root)
+        b_prime = self.ob_tree.output_extension(self.root)
         
         self.assertFalse(b)
         self.assertTrue(b_prime)
@@ -379,8 +379,8 @@ class LtsObservationTreeOracleUsesTest(unittest.TestCase):
 
         assert q is not None
 
-        b = self.ob_tree.check_complete_output(q)
-        b_prime = self.ob_tree.check_complete_output(q)
+        b = self.ob_tree.output_extension(q)
+        b_prime = self.ob_tree.output_extension(q)
 
         self.assertFalse(b)
         self.assertTrue(b_prime)
@@ -394,7 +394,7 @@ class LtsObservationTreeOracleUsesTest(unittest.TestCase):
 
         assert q is not None
 
-        self.assertRaises(ValueError, self.ob_tree.check_complete_output, q)
+        self.assertRaises(ValueError, self.ob_tree.output_extension, q)
 
     def test_do_empty_trace(self):
         self.assertTrue(self.ob_tree.do(self.root, []))
@@ -470,6 +470,8 @@ class LtsObsercationTreeRules(unittest.TestCase):
         assert q is not None
 
         self.assertTrue(b)
+
+        self.assertTrue(len(q.outputs()) > 0)
 
         b_prime = self.ob_tree.extension_rule()
 

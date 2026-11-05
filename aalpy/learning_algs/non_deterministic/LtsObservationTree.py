@@ -133,7 +133,7 @@ class LtsObservationTree:
 
         return frontier_nodes
 
-    def check_complete_output(self, node: LtsNode) -> bool:
+    def output_extension(self, node: LtsNode) -> bool:
         access_sequence = self.get_access_sequence(node)
         output_set = node.outputs()
 
@@ -163,7 +163,7 @@ class LtsObservationTree:
                     return False
 
                 while (not node.is_enabled(label)):
-                    b = self.check_complete_output(node)
+                    b = self.output_extension(node)
                     if (b):
                         return False
 
@@ -193,12 +193,14 @@ class LtsObservationTree:
         return fired
 
 
+
     def extension_rule(self) -> bool:  
         fired = False
         for basis_node in self.basis:
             inputs = basis_node.inputs()
             for i in self.input_labels - inputs:
-                basis_node.extend_and_get(i)
+                q = basis_node.extend_and_get(i)
+                self.output_extension(q)
                 fired = True
 
         return fired
@@ -210,7 +212,7 @@ class LtsObservationTree:
             if not basis_node.is_complete:
                 b = False
                 while not b:
-                    b = self.check_complete_output(basis_node)
+                    b = self.output_extension(basis_node)
                 
                 fired = True
 
