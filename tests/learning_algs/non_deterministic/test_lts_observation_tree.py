@@ -41,6 +41,14 @@ def unstable_sul():
         's3': {('?', 'a'): ['s1'], ('?', 'b'): ['s3'], ('!', 'x'): ['s1']},
     })
 
+def unstable_quescent_reducible_coffee_sul():
+    return Lts.from_state_setup({
+        's0' : {('?', 'coin'): ['s1'], ('τ', None) : ['s2']},
+        's1': {('!', 'tea'): ['s0'], ('?', 'coin'): ['s1']},
+        's2': {('?', 'coin'): ['s3']},
+        's3': {('!', 'coffee'): ['s0'], ('?', 'coin'):['s3']},
+    })
+
 class LtsObservationTreeTest(unittest.TestCase):
     
     def setUp(self) -> None:
@@ -730,6 +738,44 @@ class LtsObservationTreeHypothesisRules(unittest.TestCase):
         self._build_full_coffee_tea_machine()
         b = self.ob_tree.equivalence_rule(self.ob_tree.build_hypothesis())
         self.assertTrue(b)
+
+    def test_quiescence_reducible_rule(self):
+        self._init_with(unstable_quescent_reducible_coffee_sul())
+        self.ob_tree.insert_observation([QUIESCENCE, In('coin'), Out('coffee')])
+        self.ob_tree.insert_observation([QUIESCENCE, In('coin'), Out('coffee'), In('coin'), Out('coffee')])
+        self.ob_tree.insert_observation([QUIESCENCE, In('coin'), In('coin'), Out('coffee')])
+        self.ob_tree.insert_observation([QUIESCENCE, In('coin'), Out('coffee'), QUIESCENCE])
+        self.ob_tree.insert_observation([QUIESCENCE, In('coin'), Out('coffee'), In('coin'), Out('tea')])
+
+        self.ob_tree.insert_observation([In('coin'), Out('tea')])
+        self.ob_tree.insert_observation([In('coin'), Out('tea'), In('coin'), Out('tea')])
+        self.ob_tree.insert_observation([In('coin'), In('coin'), Out('tea')])
+        self.ob_tree.insert_observation([In('coin'), Out('tea'), QUIESCENCE])
+
+        complete_traces = [
+            [],
+            [QUIESCENCE],
+            [QUIESCENCE, In('coin')],
+            [QUIESCENCE, In('coin'), In('coin')],
+            [QUIESCENCE, In('coin'), Out('coffee')],
+            [In('coin'), Out('tea')],
+        ]
+        for trace in complete_traces:
+            node = self.ob_tree.tree_after(trace)
+            assert node is not None
+            node.mark_complete()
+
+        self.ob_tree.promotion_rule()
+        self.ob_tree.promotion_rule()
+        self.assertEqual(len(self.ob_tree.basis), 4)
+
+        self.assertIsNone(self.ob_tree.tree_after([In('coin'), Out('coffee')]))
+
+        b = self.ob_tree.quiescent_reducible_rule(self.ob_tree.build_hypothesis())
+
+        self.assertTrue(b)
+        self.assertIsNotNone(self.ob_tree.tree_after([In('coin'), Out('coffee')]))
+        
 
 
     
