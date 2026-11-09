@@ -406,7 +406,7 @@ class LtsObservationTree:
                     seen.add(child)
                     queue.append(child)
 
-            if r in frontier:
+            if r in self.basis:
                 continue
 
             access_r = self.get_access_sequence(r)
@@ -422,8 +422,8 @@ class LtsObservationTree:
 
             prefix = self.__prefix_to_frontier(access_r)
 
-            r_prime_access = access_r[:len(prefix) + 1]
-            rho = access_r[len(prefix) + 1:]
+            r_prime_access = access_r[:len(prefix)]
+            rho = access_r[len(prefix):]
 
             q_prime_state = hypothesis.suspension_automaton_after(r_prime_access)
             if q_prime_state is None:

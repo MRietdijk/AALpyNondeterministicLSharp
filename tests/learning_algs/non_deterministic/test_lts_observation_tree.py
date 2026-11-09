@@ -775,6 +775,19 @@ class LtsObservationTreeHypothesisRules(unittest.TestCase):
 
         self.assertTrue(b)
         self.assertIsNotNone(self.ob_tree.tree_after([In('coin'), Out('coffee')]))
+
+    def test_conflict_processing_rule(self):
+            self._build_normal_coffee_machine_tree()
+    
+            self.ob_tree.insert_observation([In('coin'), In('coin'), In('coin'), In('coin'), In('coin'), In('coin'), Out('tea')])
+            self.ob_tree.conflict_processing_rule(self.ob_tree.build_hypothesis())
+            self.ob_tree.conflict_processing_rule(self.ob_tree.build_hypothesis())
+            self.ob_tree.conflict_processing_rule(self.ob_tree.build_hypothesis())
+            self.ob_tree.conflict_processing_rule(self.ob_tree.build_hypothesis())
+            self.ob_tree.conflict_processing_rule(self.ob_tree.build_hypothesis())
+
+            q_8 = self.ob_tree.tree_after([In('coin'), Out('tea')])
+            assert q_8 is not None
         
 
 
