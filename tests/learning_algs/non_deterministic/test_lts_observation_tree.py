@@ -345,6 +345,23 @@ class LtsObservationTreeTest(unittest.TestCase):
         self.assertIsNone(self.ob_tree.find_identifier(q))
 
 
+    def test_to_dot(self):
+        self.ob_tree.insert_observation([In('coin'), Out('tea'), QUIESCENCE])
+        coin_node = self.ob_tree.tree_after([In('coin')])
+        assert coin_node is not None
+        self.root.mark_complete()
+
+        dot = self.ob_tree.to_dot(highlight={coin_node})
+
+        self.assertTrue(dot.startswith("digraph ObservationTree {"))
+        self.assertIn('t_0 [label="t_0 ✓", style="bold"];', dot)
+        self.assertIn('t_1 [label="t_1", fillcolor="lightblue", style="dashed,filled"];', dot)
+        self.assertIn('t_0 -> t_1 [label="?coin"];', dot)
+        self.assertIn('t_1 -> t_2 [label="!tea"];', dot)
+        self.assertIn('t_2 -> t_3 [label="!δ"];', dot)
+        self.assertIn('t_3 [label="t_3 ✓"];', dot)
+        self.assertIn('t_3 -> t_3 [label="!δ"];', dot)
+
     def test_extension_enabled_and_not_enabled(self):
         self.ob_tree.insert_observation([QUIESCENCE])
 
@@ -452,7 +469,7 @@ class LtsObservationTreeOracleUsesTest(unittest.TestCase):
         self.assertTrue(q_1.is_complete)
 
 
-class LtsObsercationTreeRules(unittest.TestCase):
+class LtsObservationTreeBuildingRules(unittest.TestCase):
     def _init_with(self, model: Lts) -> None:
         self.model: Lts = model
         self.sul = LtsAutomatonSUL(self.model)
@@ -661,8 +678,58 @@ class LtsObsercationTreeRules(unittest.TestCase):
         self.assertTrue(r in self.ob_tree.basis or r_prime in self.ob_tree.basis)
         self.assertFalse(r in self.ob_tree.basis and r_prime in self.ob_tree.basis)
 
+class LtsObservationTreeHypothesisRules(unittest.TestCase):
+    def _init_with(self, model: Lts) -> None:
+            self.model: Lts = model
+            self.sul = LtsAutomatonSUL(self.model)
+            self.oracle = PerfectKnowledgeLtsOracle(self.model.get_input_alphabet(), self.sul, self.model)
+            self.ob_tree = LtsObservationTree(set(self.model.get_input_alphabet()), self.sul, self.oracle)
+            self.root = self.ob_tree.root
+
+    def _build_normal_coffee_machine_tree(self):
+        self.ob_tree.insert_observation([In('coin'), Out('coffee')])
+        self.ob_tree.insert_observation([QUIESCENCE])
+        self.root.mark_complete()
+        self.ob_tree.insert_observation([In('coin'), Out('coffee'), QUIESCENCE])
+        q_2 = self.ob_tree.tree_after([In('coin'), Out('coffee')])
+        assert q_2 is not None
+        q_2.mark_complete()
+        self.ob_tree.insert_observation([In('coin'), In('coin'), Out('coffee')])
+        self.ob_tree.promotion_rule()
+        self.assertTrue(len(self.ob_tree.basis) == 2)
+
+    def _build_full_coffee_tea_machine(self):
+        self.ob_tree.insert_observation([In('coin'), Out('coffee')])
+        self.ob_tree.insert_observation([QUIESCENCE])
+        self.root.mark_complete()
+        self.ob_tree.insert_observation([In('coin'), Out('coffee'), QUIESCENCE])
+        self.ob_tree.insert_observation([In('coin'), Out('tea'), QUIESCENCE])
+        q_2 = self.ob_tree.tree_after([In('coin')])
+        assert q_2 is not None
+        q_2.mark_complete()
+        self.ob_tree.insert_observation([In('coin'), In('coin'), Out('coffee')])
+        self.ob_tree.promotion_rule()
+        self.assertTrue(len(self.ob_tree.basis) == 2)
+        
 
 
+    def setUp(self) -> None:
+        self._init_with(coffee_machine())
+
+
+    def test_equivalence_rule(self):
+        self._build_normal_coffee_machine_tree()
+
+        self.ob_tree.equivalence_rule(self.ob_tree.build_hypothesis())
+
+        q_8 = self.ob_tree.tree_after([In('coin'), Out('tea')])
+
+        assert q_8 is not None
+
+    def test_equivalence_rule_without_counter_example(self):
+        self._build_full_coffee_tea_machine()
+        b = self.ob_tree.equivalence_rule(self.ob_tree.build_hypothesis())
+        self.assertTrue(b)
 
 
     
@@ -677,7 +744,45 @@ class LtsObservationTreeBuildHypothesis(unittest.TestCase):
         self.root = self.ob_tree.root
 
     def test_assumption_all_states_are_input_enabled(self):
-        self.assertRaises(AssertionError, self.ob_tree.build_hypothesis)
+        self.assertRaisesRegex(AssertionError, r"Not all basis states are input-enabled: .+ is not enabled in .+", self.ob_tree.build_hypothesis)
+
+    def test_assumption_all_frontier_states_are_identifier(self):
+        self.ob_tree.insert_observation([In('coin'), Out('coffee')])
+        self.ob_tree.insert_observation([In('coin'), In('coin'), Out('coffee')])
+        self.ob_tree.insert_observation([QUIESCENCE])
+        self.root.mark_complete()
+        self.ob_tree.promotion_rule()
+
+        self.assertTrue(len(self.ob_tree.basis) == 2)
+
+        self.assertRaisesRegex(AssertionError, r"Frontier node .+ is not identified with a unique basis node", self.ob_tree.build_hypothesis)
+
+    def test_build_normal_coffee_machine_hypothesis(self):
+        self.ob_tree.insert_observation([In('coin'), Out('coffee')])
+        self.ob_tree.insert_observation([QUIESCENCE])
+        self.root.mark_complete()
+        self.ob_tree.insert_observation([In('coin'), Out('coffee'), QUIESCENCE])
+        q_2 = self.ob_tree.tree_after([In('coin'), Out('coffee')])
+        assert q_2 is not None
+        q_2.mark_complete()
+        self.ob_tree.insert_observation([In('coin'), In('coin'), Out('coffee')])
+
+        self.ob_tree.promotion_rule()
+
+        self.assertTrue(len(self.ob_tree.basis) == 2)
+
+        h = self.ob_tree.build_hypothesis()
+
+        self.assertTrue(len(h.states) == 2)
+
+        q = h.suspension_automaton_after([QUIESCENCE])
+        self.assertEqual(h.initial_state, q)
+
+        r = h.suspension_automaton_after([In('coin')])
+        assert r is not None
+
+        self.assertEqual(h.initial_state, h.suspension_automaton_after([In('coin'), Out('coffee')]))
+
  
 
 

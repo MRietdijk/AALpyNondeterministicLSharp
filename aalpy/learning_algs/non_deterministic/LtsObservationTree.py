@@ -131,7 +131,59 @@ class LtsObservationTree:
         for basis_node in self.basis:
             frontier_nodes = frontier_nodes | set(basis_node.successors.values())
 
-        return frontier_nodes
+        return frontier_nodes - self.basis
+
+    def to_dot(self, highlight: set[LtsNode] | None = None) -> str:
+        """
+        Returns the observation tree as a Graphviz dot string. Nodes are named t_0, t_1, ... in BFS order,
+        complete nodes are marked with ✓, basis nodes are bold, frontier nodes dashed and highlighted nodes filled.
+        """
+        highlight = highlight or set()
+        frontier = self.get_frontier()
+
+        names: dict[LtsNode, str] = {self.root: "t_0"}
+        order = [self.root]
+        queue = deque([self.root])
+        while queue:
+            node = queue.popleft()
+            for label in sorted(node.successors, key=str):
+                child = node.successors[label]
+                if child not in names:
+                    names[child] = f"t_{child.id}"
+                    order.append(child)
+                    queue.append(child)
+
+        def escape(text: str) -> str:
+            return text.replace('\\', '\\\\').replace('"', '\\"')
+
+        lines = ["digraph ObservationTree {", "    rankdir=TB;", "    node [shape=circle];"]
+        for node in order:
+            label = names[node] + (" ✓" if node.is_complete else "")
+            styles = []
+            if node in self.basis:
+                styles.append("bold")
+            elif node in frontier:
+                styles.append("dashed")
+            attributes = [f'label="{escape(label)}"']
+            if node in highlight:
+                styles.append("filled")
+                attributes.append('fillcolor="lightblue"')
+            if styles:
+                attributes.append(f'style="{",".join(styles)}"')
+            lines.append(f'    {names[node]} [{", ".join(attributes)}];')
+
+        for node in order:
+            for label in sorted(node.successors, key=str):
+                child = node.successors[label]
+                lines.append(f'    {names[node]} -> {names[child]} [label="{escape(str(label))}"];')
+
+        lines.append("}")
+        return "\n".join(lines) + "\n"
+
+    def save_dot(self, path: str, highlight: set[LtsNode] | None = None) -> None:
+        """Writes the dot representation of the observation tree to path."""
+        with open(path, "w", encoding="utf-8") as file:
+            file.write(self.to_dot(highlight))
 
     def output_extension(self, node: LtsNode) -> bool:
         access_sequence = self.get_access_sequence(node)
@@ -314,59 +366,76 @@ class LtsObservationTree:
 
         return prefix
 
-    def process_conflict(self, hypothesis: SuspensionAutomaton, trace: Trace, conflict: Trace):
-        r = self.tree_after(trace)
+    def __find_node_state_witness(self, node: LtsNode, state: LtsState) -> Trace | None:
+        queue = deque([(node, state, [])])
 
-        if r in self.basis | self.get_frontier():
-            return
+        visited = {(node, state)}
 
-        rho = self.__prefix_to_frontier(trace)
+        while queue:
+            r, q, trace = queue.popleft()
 
-        h = (len(rho) + len(trace)) // 2
+            additional_tree_outputs = r.outputs() - q.outputs()
+            additional_hyp_outputs = q.outputs() - r.outputs()
 
-        sigma_1 = trace[:h]
-        sigma_2 = trace[h:]
+            if additional_tree_outputs:
+                return trace + [additional_tree_outputs.pop()]
 
-        q_prime_hypothesis = hypothesis.after(hypothesis.initial_state, sigma_1)
-        q_prime_hypothesis = q_prime_hypothesis.pop()
-        q_prime_tree = self.state_to_tree_node[q_prime_hypothesis]
-        r_prime = self.tree_after(sigma_1)
+            if r.is_complete and additional_hyp_outputs:
+                return trace + [additional_hyp_outputs.pop()]
 
-        if r_prime is None:
-            raise AssertionError("process_conflict: sigma_1 is not defined")
+            for label, child in r.successors.items():
+                if label not in q.transitions:
+                    continue
+                pair = (child, q.transitions[label][0])
+                if pair not in visited:
+                    visited.add(pair)
+                    queue.append((*pair, trace + [label]))
 
-        access_q_prime = self.get_access_sequence(q_prime_tree)
+        return None
 
-        self.do(self.root, access_q_prime + sigma_2 + conflict)
 
-        witness_q_prime_r_prime = q_prime_tree.get_witness(r_prime)
-        if witness_q_prime_r_prime:
-            self.process_conflict(hypothesis, sigma_1, witness_q_prime_r_prime)
-        else:
-            self.process_conflict(hypothesis, access_q_prime + sigma_2, conflict)
+    def conflict_processing_rule(self, hypothesis: SuspensionAutomaton) -> bool:
+        frontier = self.get_frontier()
+        queue = deque(frontier)
+        seen = set(frontier)
 
-    def process_counter_example(self, hypothesis: SuspensionAutomaton, counter_example: Trace):
-        self.do(self.root, counter_example)
-        new_trace = []
-        conflict: Label | None = None
-        if (hypothesis.after(hypothesis.initial_state, counter_example)):
-            new_trace = counter_example[:-1]
-            conflict = counter_example[-1]
-        else:
-            state_hypothesis = hypothesis.initial_state
-            for label in counter_example:
-                if not hypothesis.after(state_hypothesis, [label]):
-                    conflict = label
-                    break
-                new_trace.append(label)
+        while queue:
+            r = queue.popleft()
+            for child in r.successors.values():
+                if child not in seen:
+                    seen.add(child)
+                    queue.append(child)
 
-        if isinstance(conflict, In):
-            raise AssertionError("Hypothesis is not input-enabled")
+            if r in frontier:
+                continue
 
-        if conflict is None:
-            raise AssertionError("No conflict found in counter example")
-                            
-        self.process_conflict(hypothesis, new_trace, [conflict])
+            access_r = self.get_access_sequence(r)
+            q = hypothesis.suspension_automaton_after(access_r)
+
+            if q is None:
+                continue
+
+            sigma = self.__find_node_state_witness(r, q)
+
+            if sigma is None:
+                continue
+
+            prefix = self.__prefix_to_frontier(access_r)
+
+            r_prime_access = access_r[:len(prefix) + 1]
+            rho = access_r[len(prefix) + 1:]
+
+            q_prime_state = hypothesis.suspension_automaton_after(r_prime_access)
+            if q_prime_state is None:
+                continue
+
+            q_prime = self.state_to_tree_node[q_prime_state]
+            self.do(q_prime, rho + sigma)
+            return True
+
+        return False
+
+
 
     def __shortest_trace_difference(self, q_prime: LtsState, q: LtsState) -> Trace | None:
         queue = deque([(q_prime, q, [])])
@@ -385,28 +454,26 @@ class LtsObservationTree:
         return None
 
     def quiescent_reducible_rule(self, hypothesis: SuspensionAutomaton) -> bool:
-        fired = False
         for q in hypothesis.states:
             if QUIESCENCE not in q.outputs():
                 continue
 
-            q_prime = q.transitions[QUIESCENCE][0]
-            sigma = self.__shortest_trace_difference(q_prime, q)
-            
+            r = q.transitions[QUIESCENCE][0]
+
+            sigma = self.__shortest_trace_difference(r, q)
+
             if sigma is None:
                 continue
 
-            q_node = self.state_to_tree_node[q]
+            r_node = self.state_to_tree_node[r]
 
-            access_q = self.get_access_sequence(q_node)
+            if (self.do(r_node, sigma)):
+                q_node = self.state_to_tree_node[q]
+                self.do(q_node, sigma)
 
-            if self.do(q_node, sigma):
-                self.process_counter_example(hypothesis, access_q + sigma)
-            else:
-                self.process_counter_example(hypothesis, access_q + [QUIESCENCE] + sigma)
-            fired = True
+            return True
 
-        return fired
+        return False
 
     def equivalence_rule(self, hypothesis: SuspensionAutomaton) -> bool:
         counter_example = self.oracle.find_cex(hypothesis)
@@ -414,5 +481,11 @@ class LtsObservationTree:
         if counter_example is None:
             return True
 
-        self.process_counter_example(hypothesis, counter_example)
+        counter_example_state = hypothesis.suspension_automaton_after(counter_example)
+
+        if counter_example_state:
+            self.do(self.root, counter_example)
+        else:
+            self.insert_observation(counter_example)
+
         return False
