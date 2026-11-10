@@ -21,7 +21,9 @@ def run_non_deterministic_l_sharp(alphabet: set[In], sul: LtsAutomatonSUL, model
         else:
             hypothesis = observation_tree.build_hypothesis()
 
-            if observation_tree.quiescent_reducible_rule(hypothesis):
+            if observation_tree.conflict_processing_rule(hypothesis):
+                continue
+            elif observation_tree.quiescent_reducible_rule(hypothesis):
                 continue
             else:
                 b = observation_tree.equivalence_rule(hypothesis)
