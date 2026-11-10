@@ -406,7 +406,7 @@ class LtsObservationTree:
                     seen.add(child)
                     queue.append(child)
 
-            if r in self.basis:
+            if r in frontier:
                 continue
 
             access_r = self.get_access_sequence(r)
