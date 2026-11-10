@@ -49,14 +49,14 @@ class PerfectKnowledgeLtsOracle(LtsOracle):
             hyp_outputs = hypothesis.out(set(hyp_states))
             model_outputs = model.out(set(model_states))
             if hyp_outputs != model_outputs:
-                return trace + [min(hyp_outputs ^ model_outputs, key=str)]
+                return trace + [(hyp_outputs ^ model_outputs).pop()]
 
-            hyp_inputs = set().union(*(s.inputs() for s in hyp_states))
-            model_inputs = set().union(*(s.inputs() for s in model_states))
+            hyp_inputs = set(hypothesis.get_input_alphabet())
+            model_inputs = set(hypothesis.get_input_alphabet())
             if hyp_inputs != model_inputs:
-                return trace + [min(hyp_inputs ^ model_inputs, key=str)]
+                return trace + [(hyp_inputs ^ model_inputs).pop()]
 
-            for label in sorted(hyp_inputs | hyp_outputs, key=str):
+            for label in hyp_inputs | hyp_outputs:
                 successors = (frozenset(hypothesis.after_states(set(hyp_states), [label])),
                               frozenset(model.after_states(set(model_states), [label])))
                 if successors not in visited:
