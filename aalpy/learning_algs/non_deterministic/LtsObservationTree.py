@@ -37,6 +37,14 @@ class LtsNode:
     def is_enabled(self, label : Label) -> bool:
         return label in self.successors.keys()
 
+    def get_nr_of_successors(self) -> int:
+        nr_of_successors = 1
+        for successor in self.successors.values():
+            if successor is self:
+                continue
+            nr_of_successors += successor.get_nr_of_successors()
+        return nr_of_successors
+
     def get_successor(self, label: Label) -> 'LtsNode | None':
         if label not in self.successors:
             return None
@@ -62,7 +70,6 @@ class LtsNode:
 
         common_extensions = set(self.successors.keys()) & set(node.successors.keys())
 
-        # because we otherwise will not terminate while searching for a counter example.
         if self.is_stable and node.is_stable:
             common_extensions = common_extensions - {QUIESCENCE}
 
@@ -95,8 +102,35 @@ class LtsObservationTree:
         self.oracle = oracle
         self.root = LtsNode()
         self.basis = {self.root}
+        
+        self.statistics: dict[str, int|float] = {
+            'promotion_rule_calls': 0,
+            'extension_rule_calls': 0,
+            'completion_rule_calls': 0,
+            'identification_rule_calls': 0,
+            'stable_rule_calls': 0,
+            'conflict_processing_rule_calls': 0,
+            'quiescent_reducible_rule_calls': 0,
+            'equivalence_rule_calls': 0,
+        }
 
         self.state_to_tree_node: dict[LtsState, LtsNode] = dict()
+
+    def __get_nr_of_states(self) -> int:
+        return self.root.get_nr_of_successors()
+
+    def get_current_stats(self) -> dict[str, int|float]:
+        new_statistics = self.statistics.copy()
+
+        hypothesis = self.build_hypothesis()
+
+        new_statistics['completeness_query_calls'] = self.oracle.num_comp_queries
+        new_statistics['equivalence_query_calls'] = self.oracle.num_equiv_queries
+        new_statistics['nr_of_tree_states'] = self.__get_nr_of_states()
+        new_statistics['nr_of_hypothesis_states'] = len(hypothesis.states)
+
+        return new_statistics
+
 
     def insert_observation(self, trace: Trace) -> None:
         current_node = self.root
@@ -240,19 +274,21 @@ class LtsObservationTree:
 
             if all(apartness_dict.values()):
                 self.basis.add(frontier_node)
+                self.statistics['promotion_rule_calls'] += 1
                 fired = True
 
         return fired
 
 
 
-    def extension_rule(self) -> bool:  
+    def extension_rule(self) -> bool: 
         fired = False
         for basis_node in self.basis:
             inputs = basis_node.inputs()
             for i in self.input_labels - inputs:
                 q = basis_node.extend_and_get(i)
                 self.output_extension(q)
+                self.statistics['extension_rule_calls'] += 1 
                 fired = True
 
         return fired
@@ -266,6 +302,7 @@ class LtsObservationTree:
                 while not b:
                     b = self.output_extension(basis_node)
                 
+                self.statistics['completion_rule_calls'] += 1
                 fired = True
 
         return fired
@@ -283,13 +320,17 @@ class LtsObservationTree:
         for frontier_node in self.get_frontier():
             candidates = self.find_candidates(frontier_node)
 
-            for r1, r2 in combinations(candidates, 2):
+            while len(candidates) > 1:
+                r1, r2 = next(combinations(candidates, 2))
                 witness = r1.get_witness(r2)
-                if witness == None:
+                if witness is None:
                     raise AssertionError(f"{r1} and {r2} are in the basis, but are not apart from each other")
 
                 self.do(frontier_node, witness)
+                self.statistics['identification_rule_calls'] += 1
                 fired = True
+
+                candidates = self.find_candidates(frontier_node)
 
         return fired
 
@@ -323,6 +364,7 @@ class LtsObservationTree:
                 continue
 
             self.do(r, witness)
+            self.statistics['stable_rule_calls'] += 1
             fired = True
 
         return fired
@@ -357,7 +399,6 @@ class LtsObservationTree:
         prefix = []
         current_node = self.root
         for label in trace:
-            # the first node on the trace outside the basis is a frontier node
             if current_node is None or current_node not in self.basis:
                 break
 
@@ -431,6 +472,7 @@ class LtsObservationTree:
 
             q_prime = self.state_to_tree_node[q_prime_state]
             self.do(q_prime, rho + sigma)
+            self.statistics['conflict_processing_rule_calls'] += 1
             return True
 
         return False
@@ -482,11 +524,13 @@ class LtsObservationTree:
             if (self.do(q_prime, sigma)):
                 self.add_trace(q_node, sigma)
 
+            self.statistics['quiescent_reducible_rule_calls'] += 1
             return True
 
         return False
 
     def equivalence_rule(self, hypothesis: SuspensionAutomaton) -> bool:
+        self.statistics['equivalence_rule_calls'] += 1
         counter_example = self.oracle.find_cex(hypothesis)
 
         if counter_example is None:

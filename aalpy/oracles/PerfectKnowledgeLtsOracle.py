@@ -13,6 +13,7 @@ class PerfectKnowledgeLtsOracle(LtsOracle):
     def completeness_query(self, trace: list[In | Out], outputs: set[Out]) -> Out | None:
         model = self.model_under_learning
         self.num_queries += 1
+        self.num_comp_queries += 1
         states = model.after(model.initial_state, trace)
         if not states:
             raise ValueError(f"{trace} is not a trace of the model")
@@ -34,6 +35,7 @@ class PerfectKnowledgeLtsOracle(LtsOracle):
         """
         model = self.model_under_learning
         self.num_queries += 1
+        self.num_equiv_queries += 1
 
         start = (frozenset(hypothesis.after(hypothesis.initial_state, [])),
                  frozenset(model.after(model.initial_state, [])))

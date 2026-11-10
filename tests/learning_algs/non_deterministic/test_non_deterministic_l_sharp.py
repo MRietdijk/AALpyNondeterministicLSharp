@@ -1,9 +1,11 @@
 import unittest
+from time import perf_counter
 
-from aalpy.automata.Lts import Lts, SuspensionAutomaton
-from aalpy.learning_algs.non_deterministic.NonDeterministicLSharp import run_non_deterministic_l_sharp
+from aalpy.automata.Lts import Lts, SuspensionAutomaton, Trace
+from aalpy.learning_algs.non_deterministic.NonDeterministicLSharp import NonDeterministicLSharp
 from aalpy.SULs.LtsAutomatonSUL import LtsAutomatonSUL
 from aalpy.oracles.PerfectKnowledgeLtsOracle import PerfectKnowledgeLtsOracle
+
 
 def coffee_machine():
     """After a coin, the machine non-deterministically serves coffee (back to s0) or tea (to quiescent s2)."""
@@ -172,14 +174,16 @@ class TestRunNonDeterministicLSharp(unittest.TestCase):
         if show_original_model:
             iots.visualize()
 
-        hypothesis = run_non_deterministic_l_sharp(set(iots.get_input_alphabet()), sul, iots)
+        learn_algorithm = NonDeterministicLSharp(set(iots.get_input_alphabet()), sul, iots)
+
+        hypothesis = learn_algorithm.run()
 
         if show_learned_model:
             hypothesis.visualize()
         
         return hypothesis
 
-    def check_counter_example(self, iots: Lts, hypothesis: SuspensionAutomaton):
+    def check_counter_example(self, iots: Lts, hypothesis: SuspensionAutomaton) -> (Trace | None):
         sul = LtsAutomatonSUL(iots)
         eq_oracle = PerfectKnowledgeLtsOracle(iots.get_input_alphabet(), sul, iots)
         return eq_oracle.find_cex(hypothesis)
@@ -191,6 +195,33 @@ class TestRunNonDeterministicLSharp(unittest.TestCase):
         cex = self.check_counter_example(coffee_machine_lts, learned_sul)
 
         self.assertIsNone(cex)
+
+    def test_statistics(self):
+        coffee_machine_lts = coffee_machine()
+        sul = LtsAutomatonSUL(coffee_machine_lts)
+
+        learn_algorithm = NonDeterministicLSharp(set(coffee_machine_lts.get_input_alphabet()), sul, coffee_machine_lts)
+
+        learn_algorithm.run()
+
+        stats = learn_algorithm.observation_tree.get_current_stats()
+
+        expected = {
+            'promotion_rule_calls': 1,
+            'extension_rule_calls': 2,
+            'completion_rule_calls': 2,
+            'identification_rule_calls': 2,
+            'stable_rule_calls': 0,
+            'conflict_processing_rule_calls': 0,
+            'quiescent_reducible_rule_calls': 0,
+            'equivalence_rule_calls': 1,
+            'equivalence_query_calls': 1,
+            'nr_of_tree_states': 9,
+            'nr_of_hypothesis_states': 2,
+        }
+
+        actual = {key: stats.get(key) for key in expected}
+        self.assertEqual(actual, expected)
 
     def test_learn_mqtt(self):
         mqtt_lts = mqtt_broker()
@@ -211,7 +242,69 @@ class TestRunNonDeterministicLSharp(unittest.TestCase):
     def test_learn_volpato_tretmans_1_iots(self):
         iots = volpato_tretmans_1_iots()
 
-        learned_sul = self.learn_sul(iots, True)
+        learned_sul = self.learn_sul(iots)
         cex = self.check_counter_example(iots, learned_sul)
 
         self.assertIsNone(cex)
+
+class TestRunQueryBenchMarks(unittest.TestCase):
+    def print_statistics(self, statistics: dict[str, int|float]):
+        labels = {name: name.replace('_', ' ').capitalize() for name in statistics}
+        width = max(map(len, labels.values()), default=0)
+
+        line = '-' * (width + 12)
+        print(f'\n{line}')
+        for name, value in statistics.items():
+            print(f'{labels[name]:<{width}}  {value:>8}')
+        print(line)
+
+    def run_benchmark(self, iots : Lts, show_learned_model: bool = False, show_original_model: bool = False, show_tree: bool = False, show_stats: bool = True) -> SuspensionAutomaton:
+        sul = LtsAutomatonSUL(iots)
+                
+        if show_original_model:
+            iots.visualize()
+
+
+        learn_algorithm = NonDeterministicLSharp(set(iots.get_input_alphabet()), sul, iots)
+
+        start = perf_counter()
+        hypothesis = learn_algorithm.run()
+        end = perf_counter()
+
+        if show_tree:
+            learn_algorithm.observation_tree.save_dot('tree.dot')
+
+        if show_learned_model:
+            hypothesis.visualize()
+
+        if show_stats:
+            stats = learn_algorithm.get_statistics()
+
+            stats['runtime_(seconds)'] = round(end - start, 4)
+
+            self.print_statistics(stats)
+
+
+
+        
+        return hypothesis
+
+    def test_benchmark_coffee_machine(self):
+        coffee_machine_lts = coffee_machine()
+
+        self.run_benchmark(coffee_machine_lts)
+
+    def test_benchmark_volpato_tretmans_1_iots(self):
+        iots = volpato_tretmans_1_iots()
+        self.run_benchmark(iots)
+
+    def test_benchmark_volpato_tretmans_2_iots(self):
+        iots = volpato_tretmans_2_iots()
+        self.run_benchmark(iots)
+
+    def test_benchmark_mqtt(self):
+        mqtt_lts = mqtt_broker()
+        self.run_benchmark(mqtt_lts)
+
+
+

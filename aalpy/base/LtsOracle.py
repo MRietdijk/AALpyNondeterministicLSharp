@@ -9,6 +9,8 @@ class LtsOracle(ABC):
         self.input_alphabet = input_alphabet
         self.sul = sul
         self.num_queries = 0
+        self.num_comp_queries = 0
+        self.num_equiv_queries = 0
         self.num_steps = 0
 
     @abstractmethod
