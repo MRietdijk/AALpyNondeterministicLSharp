@@ -359,16 +359,23 @@ class LtsObservationTreeTest(unittest.TestCase):
         assert coin_node is not None
         self.root.mark_complete()
 
+        tea_node = self.ob_tree.tree_after([In('coin'), Out('tea')])
+        quiescent_node = self.ob_tree.tree_after([In('coin'), Out('tea'), QUIESCENCE])
+        assert tea_node is not None and quiescent_node is not None
+
         dot = self.ob_tree.to_dot(highlight={coin_node})
 
+        root, coin, tea, quiescent = (f"t_{node.id}" for node in (self.root, coin_node, tea_node, quiescent_node))
+
         self.assertTrue(dot.startswith("digraph ObservationTree {"))
-        self.assertIn('t_0 [label="t_0 ✓", style="bold"];', dot)
-        self.assertIn('t_1 [label="t_1", fillcolor="lightblue", style="dashed,filled"];', dot)
-        self.assertIn('t_0 -> t_1 [label="?coin"];', dot)
-        self.assertIn('t_1 -> t_2 [label="!tea"];', dot)
-        self.assertIn('t_2 -> t_3 [label="!δ"];', dot)
-        self.assertIn('t_3 [label="t_3 ✓"];', dot)
-        self.assertIn('t_3 -> t_3 [label="!δ"];', dot)
+        self.assertIn(f'{root} [label="{root} ✓", style="bold"];', dot)
+        self.assertIn(f'{coin} [label="{coin}", fillcolor="lightblue", style="dashed,filled"];', dot)
+        self.assertIn(f'{tea} [label="{tea}"];', dot)
+        self.assertIn(f'{root} -> {coin} [label="?coin"];', dot)
+        self.assertIn(f'{coin} -> {tea} [label="!tea"];', dot)
+        self.assertIn(f'{tea} -> {quiescent} [label="!δ"];', dot)
+        self.assertIn(f'{quiescent} [label="{quiescent} ✓"];', dot)
+        self.assertIn(f'{quiescent} -> {quiescent} [label="!δ"];', dot)
 
     def test_extension_enabled_and_not_enabled(self):
         self.ob_tree.insert_observation([QUIESCENCE])

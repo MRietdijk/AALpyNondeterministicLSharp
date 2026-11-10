@@ -135,13 +135,13 @@ class LtsObservationTree:
 
     def to_dot(self, highlight: set[LtsNode] | None = None) -> str:
         """
-        Returns the observation tree as a Graphviz dot string. Nodes are named t_0, t_1, ... in BFS order,
+        Returns the observation tree as a Graphviz dot string. Nodes are named t_<id> after their node id,
         complete nodes are marked with ✓, basis nodes are bold, frontier nodes dashed and highlighted nodes filled.
         """
         highlight = highlight or set()
         frontier = self.get_frontier()
 
-        names: dict[LtsNode, str] = {self.root: "t_0"}
+        names: dict[LtsNode, str] = {self.root: f"t_{self.root.id}"}
         order = [self.root]
         queue = deque([self.root])
         while queue:
