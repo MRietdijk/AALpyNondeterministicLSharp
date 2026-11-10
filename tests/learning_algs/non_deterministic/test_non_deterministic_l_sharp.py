@@ -1,6 +1,6 @@
 import unittest
 
-from aalpy.automata.Lts import Lts
+from aalpy.automata.Lts import Lts, SuspensionAutomaton
 from aalpy.learning_algs.non_deterministic.NonDeterministicLSharp import run_non_deterministic_l_sharp
 from aalpy.SULs.LtsAutomatonSUL import LtsAutomatonSUL
 from aalpy.oracles.PerfectKnowledgeLtsOracle import PerfectKnowledgeLtsOracle
@@ -144,29 +144,54 @@ def mqtt_broker():
                 
 })
 
+def volpato_tretmans_iots():
+    return Lts.from_state_setup({
+        's0': {('?', 'a'): ['s1']},
+        's1': {('?', 'a'): ['s2']},
+        's2': {('?', 'a'): ['s2'], ('!', 'y'): ['s2'], ('!', 'x'): ['s0']}
+    })
+
 
 
 class TestRunNonDeterministicLSharp(unittest.TestCase):
+    def learn_sul(self, iots : Lts, show_learned_model: bool = False, show_original_model: bool = False) -> SuspensionAutomaton:
+        sul = LtsAutomatonSUL(iots)
+        
+        if show_original_model:
+            iots.visualize()
+
+        hypothesis = run_non_deterministic_l_sharp(set(iots.get_input_alphabet()), sul, iots)
+
+        if show_learned_model:
+            hypothesis.visualize()
+        
+        return hypothesis
+
+    def check_counter_example(self, iots: Lts, hypothesis: SuspensionAutomaton):
+        sul = LtsAutomatonSUL(iots)
+        eq_oracle = PerfectKnowledgeLtsOracle(iots.get_input_alphabet(), sul, iots)
+        return eq_oracle.find_cex(hypothesis)
+
     def test_learn_coffee_machine(self):
         coffee_machine_lts = coffee_machine()
-        sul = LtsAutomatonSUL(coffee_machine_lts)
 
-        learned_sul = run_non_deterministic_l_sharp(set(coffee_machine_lts.get_input_alphabet()), sul, coffee_machine_lts)
-
-        eq_oracle = PerfectKnowledgeLtsOracle(coffee_machine_lts.get_input_alphabet(), sul, coffee_machine_lts)
-
-        cex = eq_oracle.find_cex(learned_sul)
+        learned_sul = self.learn_sul(coffee_machine_lts)
+        cex = self.check_counter_example(coffee_machine_lts, learned_sul)
 
         self.assertIsNone(cex)
 
     def test_learn_mqtt(self):
         mqtt_lts = mqtt_broker()
-        sul = LtsAutomatonSUL(mqtt_lts)
 
-        learned_sul = run_non_deterministic_l_sharp(set(mqtt_lts.get_input_alphabet()), sul, mqtt_lts)
+        learned_sul = self.learn_sul(mqtt_lts)
+        cex = self.check_counter_example(mqtt_lts, learned_sul)
 
-        eq_oracle = PerfectKnowledgeLtsOracle(mqtt_lts.get_input_alphabet(), sul, mqtt_lts)
+        self.assertIsNone(cex)
 
-        cex = eq_oracle.find_cex(learned_sul)
+    def test_learn_volpato_tretmans_iots(self):
+        iots = volpato_tretmans_iots()
+
+        learned_sul = self.learn_sul(iots)
+        cex = self.check_counter_example(iots, learned_sul)
 
         self.assertIsNone(cex)
