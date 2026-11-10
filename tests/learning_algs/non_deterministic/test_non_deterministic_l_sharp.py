@@ -262,7 +262,7 @@ class TestRunQueryBenchMarks(unittest.TestCase):
         sul = LtsAutomatonSUL(iots)
                 
         if show_original_model:
-            iots.visualize()
+            iots.visualize("original_model")
 
 
         learn_algorithm = NonDeterministicLSharp(set(iots.get_input_alphabet()), sul, iots)
@@ -284,9 +284,6 @@ class TestRunQueryBenchMarks(unittest.TestCase):
 
             self.print_statistics(stats)
 
-
-
-        
         return hypothesis
 
     def test_benchmark_coffee_machine(self):
