@@ -410,7 +410,7 @@ class LtsObservationTree:
                 continue
 
             access_r = self.get_access_sequence(r)
-            q = hypothesis.suspension_automaton_after(access_r)
+            q = hypothesis.suspension_automaton_after(hypothesis.initial_state, access_r)
 
             if q is None:
                 continue
@@ -425,7 +425,7 @@ class LtsObservationTree:
             r_prime_access = access_r[:len(prefix)]
             rho = access_r[len(prefix):]
 
-            q_prime_state = hypothesis.suspension_automaton_after(r_prime_access)
+            q_prime_state = hypothesis.suspension_automaton_after(hypothesis.initial_state, r_prime_access)
             if q_prime_state is None:
                 continue
 
@@ -453,23 +453,34 @@ class LtsObservationTree:
 
         return None
 
+    def add_trace(self, state: LtsNode, trace: Trace):
+        current_state = state
+        for symbol in trace:
+            current_state = current_state.extend_and_get(symbol)
+
     def quiescent_reducible_rule(self, hypothesis: SuspensionAutomaton) -> bool:
         for q in hypothesis.states:
             if QUIESCENCE not in q.outputs():
                 continue
 
-            r = q.transitions[QUIESCENCE][0]
+            r = hypothesis.suspension_automaton_after(q, [QUIESCENCE])
+
+            if r is None:
+                continue
 
             sigma = self.__shortest_trace_difference(r, q)
 
             if sigma is None:
                 continue
 
-            r_node = self.state_to_tree_node[r]
+            q_node = self.state_to_tree_node[q]
+            q_prime = q_node.get_successor(QUIESCENCE)
 
-            if (self.do(r_node, sigma)):
-                q_node = self.state_to_tree_node[q]
-                self.do(q_node, sigma)
+            if q_prime is None:
+                raise AssertionError(f"State {q} is quiescent in the hypothesis, but {q_node} does not allow a δ-transition in the tree.")
+
+            if (self.do(q_prime, sigma)):
+                self.add_trace(q_node, sigma)
 
             return True
 
@@ -481,7 +492,7 @@ class LtsObservationTree:
         if counter_example is None:
             return True
 
-        counter_example_state = hypothesis.suspension_automaton_after(counter_example)
+        counter_example_state = hypothesis.suspension_automaton_after(hypothesis.initial_state, counter_example)
 
         if counter_example_state:
             self.do(self.root, counter_example)

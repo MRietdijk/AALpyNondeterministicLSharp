@@ -144,13 +144,25 @@ def mqtt_broker():
                 
 })
 
-def volpato_tretmans_iots():
+def volpato_tretmans_2_iots():
+    """The example IOTS used in the paper 'Approximate Active Learning of Nondeterministic Input Output Transition Systems' by Michele Volpato and Jan Tretmans"""
     return Lts.from_state_setup({
         's0': {('?', 'a'): ['s1']},
         's1': {('?', 'a'): ['s2']},
         's2': {('?', 'a'): ['s2'], ('!', 'y'): ['s2'], ('!', 'x'): ['s0']}
     })
 
+def volpato_tretmans_1_iots():
+    """The example IOTS used in the paper 'Active Learning of Nondeterministic Systems from an ioco Perspective' by Michele Volpato and Jan Tretmans"""
+    return Lts.from_state_setup({
+        's0': {('?', 'a'): ['s1', 's2']},
+        's1': {('?', 'a'): ['s1'], ('!', 'x'): ['s3']},
+        's2': {('?', 'a'): ['s4']},
+        's3': {('?', 'a'): ['s3'], ('!', 'x'): ['s5']},
+        's4': {('?', 'a'): ['s4'], ('!', 'x'): ['s6']},
+        's5': {('?', 'a'): ['s5']},
+        's6': {('?', 'a'): ['s6'], ('!', 'y'): ['s5']},
+    })
 
 
 class TestRunNonDeterministicLSharp(unittest.TestCase):
@@ -188,10 +200,18 @@ class TestRunNonDeterministicLSharp(unittest.TestCase):
 
         self.assertIsNone(cex)
 
-    def test_learn_volpato_tretmans_iots(self):
-        iots = volpato_tretmans_iots()
+    def test_learn_volpato_tretmans_2_iots(self):
+        iots = volpato_tretmans_2_iots()
 
         learned_sul = self.learn_sul(iots)
+        cex = self.check_counter_example(iots, learned_sul)
+
+        self.assertIsNone(cex)
+
+    def test_learn_volpato_tretmans_1_iots(self):
+        iots = volpato_tretmans_1_iots()
+
+        learned_sul = self.learn_sul(iots, True)
         cex = self.check_counter_example(iots, learned_sul)
 
         self.assertIsNone(cex)

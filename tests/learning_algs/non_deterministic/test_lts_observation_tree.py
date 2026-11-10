@@ -833,13 +833,13 @@ class LtsObservationTreeBuildHypothesis(unittest.TestCase):
 
         self.assertTrue(len(h.states) == 2)
 
-        q = h.suspension_automaton_after([QUIESCENCE])
+        q = h.suspension_automaton_after(h.initial_state, [QUIESCENCE])
         self.assertEqual(h.initial_state, q)
 
-        r = h.suspension_automaton_after([In('coin')])
+        r = h.suspension_automaton_after(h.initial_state, [In('coin')])
         assert r is not None
 
-        self.assertEqual(h.initial_state, h.suspension_automaton_after([In('coin'), Out('coffee')]))
+        self.assertEqual(h.initial_state, h.suspension_automaton_after(h.initial_state, [In('coin'), Out('coffee')]))
 
  
 

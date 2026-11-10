@@ -309,8 +309,8 @@ class SuspensionAutomaton(Lts):
                 if len(targets) > 1:
                     raise ValueError(f"state {state.state_id} is non-deterministic on {label}")
 
-    def suspension_automaton_after(self, trace: Trace) -> LtsState | None:
-        current_state = self.initial_state
+    def suspension_automaton_after(self, state: LtsState[InputType, OutputType], trace: Trace) -> LtsState | None:
+        current_state = state
         for label in trace:
             successor_state = current_state.successor_states(label)
             if not successor_state:
