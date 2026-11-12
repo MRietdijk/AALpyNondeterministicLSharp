@@ -1,11 +1,15 @@
 import unittest
 from time import perf_counter
+from pathlib import Path
+
 
 from aalpy.automata.Lts import Lts, SuspensionAutomaton, Trace
 from aalpy.learning_algs.non_deterministic.NonDeterministicLSharp import NonDeterministicLSharp
 from aalpy.SULs.LtsAutomatonSUL import LtsAutomatonSUL
 from aalpy.oracles.PerfectKnowledgeLtsOracle import PerfectKnowledgeLtsOracle
+from aalpy.utils import load_automaton_from_file
 
+DOT_MODELS_DIR = Path(__file__).resolve().parents[3] / 'DotModels' / 'lts'
 
 def coffee_machine():
     """After a coin, the machine non-deterministically serves coffee (back to s0) or tea (to quiescent s2)."""
@@ -303,5 +307,14 @@ class TestRunQueryBenchMarks(unittest.TestCase):
         mqtt_lts = mqtt_broker()
         self.run_benchmark(mqtt_lts)
 
+    def test_benchmark_tcp(self):
+        tcp_lts = load_automaton_from_file(DOT_MODELS_DIR / 'TCP.dot', 'lts')
+        self.run_benchmark(tcp_lts)
 
+    def test_benchmark_le_3_center(self):
+        le_3_center_lts = load_automaton_from_file(DOT_MODELS_DIR / 'LE-3Center.dot', 'lts')
+        self.run_benchmark(le_3_center_lts)
 
+    def test_benchmark_le_3_side(self):
+        le_3_side_lts = load_automaton_from_file(DOT_MODELS_DIR / 'LE-3Side.dot', 'lts')
+        self.run_benchmark(le_3_side_lts)

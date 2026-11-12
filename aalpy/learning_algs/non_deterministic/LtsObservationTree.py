@@ -407,34 +407,6 @@ class LtsObservationTree:
 
         return prefix
 
-    def __find_node_state_witness(self, node: LtsNode, state: LtsState) -> Trace | None:
-        queue = deque([(node, state, [])])
-
-        visited = {(node, state)}
-
-        while queue:
-            r, q, trace = queue.popleft()
-
-            additional_tree_outputs = r.outputs() - q.outputs()
-            additional_hyp_outputs = q.outputs() - r.outputs()
-
-            if additional_tree_outputs:
-                return trace + [additional_tree_outputs.pop()]
-
-            if r.is_complete and additional_hyp_outputs:
-                return trace + [additional_hyp_outputs.pop()]
-
-            for label, child in r.successors.items():
-                if label not in q.transitions:
-                    continue
-                pair = (child, q.transitions[label][0])
-                if pair not in visited:
-                    visited.add(pair)
-                    queue.append((*pair, trace + [label]))
-
-        return None
-
-
     def conflict_processing_rule(self, hypothesis: SuspensionAutomaton) -> bool:
         frontier = self.get_frontier()
         queue = deque(frontier)
@@ -456,15 +428,19 @@ class LtsObservationTree:
             if q is None:
                 continue
 
-            sigma = self.__find_node_state_witness(r, q)
+            q_node = self.state_to_tree_node[q]
+
+            sigma = r.get_witness(q_node)
 
             if sigma is None:
                 continue
 
             prefix = self.__prefix_to_frontier(access_r)
+            suffix = access_r[len(prefix):]
 
-            r_prime_access = access_r[:len(prefix)]
-            rho = access_r[len(prefix):]
+            r_prime_access = prefix + suffix[:len(suffix) // 2]
+            rho = access_r[len(r_prime_access):]
+
 
             q_prime_state = hypothesis.suspension_automaton_after(hypothesis.initial_state, r_prime_access)
             if q_prime_state is None:
