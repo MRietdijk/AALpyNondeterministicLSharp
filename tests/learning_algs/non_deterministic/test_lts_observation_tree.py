@@ -49,6 +49,16 @@ def unstable_quescent_reducible_coffee_sul():
         's3': {('!', 'coffee'): ['s0'], ('?', 'coin'):['s3']},
     })
 
+def coffee_machine_deep_counter_example():
+    return Lts.from_state_setup({
+        's0' : {('?', 'coin'): ['s1']},
+        's1': {('?', 'coin'): ['s1'], ('!', 'coffee'): ['s2']},
+        's2': {('?', 'coin'): ['s3']},
+        's3': {('?', 'coin'): ['s3'], ('!', 'coffee'): ['s4']},
+        's4': {('?', 'coin'): ['s5']},
+        's5': {('?', 'coin'): ['s5'], ('!', 'coffee'): ['s1'], ('!', 'tea'): ['s1']},
+    })
+
 class LtsObservationTreeTest(unittest.TestCase):
     
     def setUp(self) -> None:
@@ -784,16 +794,23 @@ class LtsObservationTreeHypothesisRules(unittest.TestCase):
         self.assertIsNotNone(self.ob_tree.tree_after([In('coin'), Out('coffee')]))
 
     def test_conflict_processing_rule(self):
-        self._build_normal_coffee_machine_tree()
+        self._init_with(coffee_machine_deep_counter_example())
+        self.ob_tree.insert_observation([QUIESCENCE])
+        self.root.mark_complete()
+        self.ob_tree.insert_observation([In('coin'), Out('coffee')])
+        self.ob_tree.promotion_rule()
+        self.ob_tree.extension_rule()
+        self.ob_tree.completion_rule()
+        self.ob_tree.identification_rule()
 
-        self.ob_tree.insert_observation([In('coin'), In('coin'), In('coin'), In('coin'), In('coin'), In('coin'), Out('tea')])
-        self.ob_tree.conflict_processing_rule(self.ob_tree.build_hypothesis())
-        self.ob_tree.conflict_processing_rule(self.ob_tree.build_hypothesis())
-        self.ob_tree.conflict_processing_rule(self.ob_tree.build_hypothesis())
+        self.ob_tree.insert_observation([In('coin'), Out('coffee'), In('coin'), Out('coffee'), In('coin'), In('coin'), Out('tea')])
+        self.ob_tree.identification_rule()
         self.ob_tree.conflict_processing_rule(self.ob_tree.build_hypothesis())
 
-        q_8 = self.ob_tree.tree_after([In('coin'), In('coin'), Out('tea')])
+        q_8 = self.ob_tree.tree_after([In('coin'), In('coin')])
         assert q_8 is not None
+
+        self.assertTrue(q_8.is_complete)
         
 
 
