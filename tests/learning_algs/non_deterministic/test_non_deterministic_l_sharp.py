@@ -19,6 +19,14 @@ def coffee_machine():
         's2': {('?', 'coin'): ['s1']},
     })
 
+def non_deterministic_example():
+    return Lts.from_state_setup({
+        's0': {('?', 'a'): ['s1', 's3']},
+        's1': {('?', 'a'): ['s1'], ('!', 'x'):['s2']},
+        's2': {('?', 'a'): ['s2']},
+        's3': {('?', 'a'): ['s3']},
+    })
+
 def mqtt_broker():
     return Lts.from_state_setup({
         's0': {('?', 'connect'): ['s0_connect'],
@@ -294,6 +302,11 @@ class TestRunQueryBenchMarks(unittest.TestCase):
         coffee_machine_lts = coffee_machine()
 
         self.run_benchmark(coffee_machine_lts)
+
+    def test_non_deterministic_example(self):
+        example_lts = non_deterministic_example()
+
+        self.run_benchmark(example_lts)
 
     def test_benchmark_volpato_tretmans_1_iots(self):
         iots = volpato_tretmans_1_iots()
