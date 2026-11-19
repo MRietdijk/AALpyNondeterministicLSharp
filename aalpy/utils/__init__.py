@@ -42,4 +42,5 @@ from .HelperFunctions import (
     generate_input_output_data_from_automata,
     generate_input_output_data_from_vpa,
     suspension_automaton_from_lts,
+    mealy_machine_to_lts,
 )

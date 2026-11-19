@@ -6,6 +6,7 @@ from collections import defaultdict, deque
 from typing import Any, Callable, List
 
 from aalpy import Mdp, MarkovChain, McState, MealyMachine, MooreMachine, Dfa, DfaState
+from aalpy.automata.Lts import Lts
 
 
 def extend_set(list_to_extend: list, new_elements: list) -> list:
@@ -707,3 +708,40 @@ def mc_format_to_mdp(data: list) -> list:
             new_sequence.append(('Input', item))
         augmented_data.append(new_sequence)
     return augmented_data
+
+def mealy_machine_to_lts(mealy_machine: MealyMachine) -> Lts:
+    """
+    Transform a Mealy machine into a labelled transition system (LTS).
+
+    Each Mealy transition ``q --i/o--> q'`` is split into two LTS transitions
+    through a fresh intermediate state: ``q --i--> s --o--> q'``.
+
+    :param MealyMachine mealy_machine: The Mealy machine to convert.
+    :return Lts: The resulting LTS, containing the original states plus one
+        intermediate state per Mealy transition (|Q| + |Q|·|I| states in total).
+    """
+    from aalpy.automata.Lts import LtsState
+    lts_initial = None
+    lts_dict = {mealy_state: LtsState(mealy_state.state_id) for mealy_state in mealy_machine.states}
+    lts_states: list[LtsState] = [lts_state for lts_state in lts_dict.values()]
+    
+    for mealy_state in mealy_machine.states:
+        lts_state = lts_dict[mealy_state]
+
+        if mealy_state is mealy_machine.initial_state:
+            lts_initial = lts_state
+
+        for mealy_input, mealy_successor in mealy_state.transitions.items():
+
+            lts_input_target = LtsState(f"{mealy_state.state_id}_{mealy_input}")
+            lts_states.append(lts_input_target)
+
+            lts_state.add_input(mealy_input, lts_input_target)
+
+            mealy_output = mealy_state.output_fun[mealy_input]
+            lts_input_target.add_output(mealy_output, lts_dict[mealy_successor])
+
+    assert lts_initial is not None
+
+    return Lts(lts_initial, lts_states)
+

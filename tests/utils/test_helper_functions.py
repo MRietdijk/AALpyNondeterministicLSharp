@@ -1,6 +1,7 @@
 import random
 from typing import Any, Tuple
 import unittest
+from pathlib import Path
 
 from aalpy.automata import (Dfa, DfaState, MooreMachine, MooreState, MealyMachine, MealyState, Mdp, MdpState,
                             MarkovChain, Vpa, VpaState, VpaAlphabet, VpaTransition)
@@ -22,7 +23,13 @@ from aalpy.utils.HelperFunctions import (
     mc_format_to_mdp,
     generate_input_output_data_from_automata,
     generate_input_output_data_from_vpa,
+    mealy_machine_to_lts,
 )
+
+from aalpy.utils.FileHandler import load_automaton_from_file
+
+DOT_MODELS_DIR = Path(__file__).resolve().parents[2] / 'DotModels'
+
 
 
 def parity_dfa():
@@ -621,6 +628,33 @@ class TestGenerateInputOutputDataFromVpa(unittest.TestCase):
         data = generate_input_output_data_from_vpa(vpa, num_sequences=1000, max_seq_len=2, max_attempts=5)
         self.assertLessEqual(len(data), 1000)
 
+class TestMealyMachineToLts(unittest.TestCase):
+
+    def calculate_nr_of_lts_states(self, mealy_machine: MealyMachine):
+        return (len(mealy_machine.states) + len(mealy_machine.states) * len(mealy_machine.get_input_alphabet()))
+
+    def test_simple_coffee_machine(self):
+        from aalpy.automata.Lts import In, Out
+
+        mealy = load_automaton_from_file(DOT_MODELS_DIR / "coffee_mealy.dot", "mealy")
+
+        lts = mealy_machine_to_lts(mealy)
+        q_1 = lts.after(lts.initial_state, [In("coin")])
+        q_1 = q_1.pop()
+        assert q_1 is not None
+
+        self.assertEqual(q_1.outputs(), {Out(" beep")})
+
+        self.assertEqual(len(lts.states), self.calculate_nr_of_lts_states(mealy))
+
+    def test_angluin_mealy(self):
+        mealy = load_automaton_from_file(DOT_MODELS_DIR / "Angluin_Mealy.dot", "mealy")
+
+        lts = mealy_machine_to_lts(mealy)
+
+        self.assertEqual(len(lts.states), self.calculate_nr_of_lts_states(mealy))
+
+    
 
 if __name__ == '__main__':
     unittest.main()
