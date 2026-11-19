@@ -26,4 +26,5 @@ class PerfectKnowledgeEqOracle(Oracle):
         :param DeterministicAutomaton hypothesis: Current hypothesis.
         :return tuple | None: Counterexample inputs, None if no counterexample is found.
         """
+        self.num_queries += 1
         return bisimilar(hypothesis, self.model_under_learning, return_cex=True)

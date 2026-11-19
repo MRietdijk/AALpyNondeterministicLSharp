@@ -3,13 +3,16 @@ from time import perf_counter
 from pathlib import Path
 
 
+from aalpy.learning_algs.deterministic.LSharp import run_Lsharp
+from aalpy.automata.MealyMachine import MealyMachine
 from aalpy.automata.Lts import Lts, SuspensionAutomaton, Trace
 from aalpy.learning_algs.non_deterministic.NonDeterministicLSharp import NonDeterministicLSharp
-from aalpy.SULs.LtsAutomatonSUL import LtsAutomatonSUL
-from aalpy.oracles.PerfectKnowledgeLtsOracle import PerfectKnowledgeLtsOracle
-from aalpy.utils import load_automaton_from_file
+from aalpy.SULs import LtsAutomatonSUL, MealySUL
+from aalpy.oracles import PerfectKnowledgeLtsOracle, PerfectKnowledgeEqOracle
+from aalpy.utils import load_automaton_from_file, mealy_machine_to_lts
 
-DOT_MODELS_DIR = Path(__file__).resolve().parents[3] / 'DotModels' / 'lts'
+DOT_MODELS_DIR = Path(__file__).resolve().parents[3] / 'DotModels'
+DOT_MODELS_DIR_LTS = DOT_MODELS_DIR / 'lts'
 
 def coffee_machine():
     """After a coin, the machine non-deterministically serves coffee (back to s0) or tea (to quiescent s2)."""
@@ -347,13 +350,74 @@ class TestRunQueryBenchMarks(unittest.TestCase):
         self.run_benchmark(sul)
 
     def test_benchmark_tcp(self):
-        tcp_lts = load_automaton_from_file(DOT_MODELS_DIR / 'TCP.dot', 'lts')
+        tcp_lts = load_automaton_from_file(DOT_MODELS_DIR_LTS / 'TCP.dot', 'lts')
         self.run_benchmark(tcp_lts)
 
     def test_benchmark_le_3_center(self):
-        le_3_center_lts = load_automaton_from_file(DOT_MODELS_DIR / 'LE-3Center.dot', 'lts')
+        le_3_center_lts = load_automaton_from_file(DOT_MODELS_DIR_LTS / 'LE-3Center.dot', 'lts')
         self.run_benchmark(le_3_center_lts)
 
     def test_benchmark_le_3_side(self):
-        le_3_side_lts = load_automaton_from_file(DOT_MODELS_DIR / 'LE-3Side.dot', 'lts')
+        le_3_side_lts = load_automaton_from_file(DOT_MODELS_DIR_LTS / 'LE-3Side.dot', 'lts')
         self.run_benchmark(le_3_side_lts)
+
+
+class TestClassicLSharpVsNonDeterministicLSharp(unittest.TestCase):
+    def benchmark_mealy_machine(self, mealy: MealyMachine):
+        lts = mealy_machine_to_lts(mealy)
+        lts_sul = LtsAutomatonSUL(lts)
+
+        sul_mealy = MealySUL(mealy)
+        eq_oracle = PerfectKnowledgeEqOracle(mealy.get_input_alphabet(), sul_mealy, mealy)
+        
+
+        non_deterministic_learn_alg = NonDeterministicLSharp(set(lts.get_input_alphabet()), lts_sul, lts)
+        non_deterministic_learn_alg.run()
+        l_sharp_results = run_Lsharp(mealy.get_input_alphabet(), sul_mealy, eq_oracle, 'mealy', return_data=True, print_level=0)
+
+        assert isinstance(l_sharp_results, tuple)
+
+
+        non_deterministic_l_sharp_results = non_deterministic_learn_alg.get_statistics()
+
+
+        print()
+        print("#"*8)
+        self.print_result("output queries:",
+                          non_deterministic_l_sharp_results['completeness_query_calls'],
+                          l_sharp_results[1]['queries_learning'])
+        print("-"*8)
+        self.print_result("equivalence queries:", 
+                          non_deterministic_l_sharp_results['equivalence_query_calls'], 
+                          l_sharp_results[1]['queries_eq_oracle'])
+        print("#"*8)
+
+
+    def print_result(self, title: str, result_non_deterministic: int | float, result_l_sharp: int | float):
+        print(title)
+        print(f"\tnon-deterministic L#: \t{result_non_deterministic}")
+        print(f"\tclassic L#: \t\t{result_l_sharp}")     
+        print(f"\tratio: \t\t\t{result_non_deterministic / result_l_sharp:.2f}")
+                
+
+    def test_coffee_machine_benchmark(self):
+        mealy = load_automaton_from_file(DOT_MODELS_DIR /'coffee_mealy.dot', 'mealy')
+        self.benchmark_mealy_machine(mealy)
+
+    def test_angluin_example_benchmark(self):
+        mealy = load_automaton_from_file(DOT_MODELS_DIR / 'Angluin_Mealy.dot', 'mealy')
+        self.benchmark_mealy_machine(mealy)
+
+    def test_bluetooth_benchmark(self):
+        mealy = load_automaton_from_file(DOT_MODELS_DIR / 'Bluetooth' / 'bluetooth_model.dot', 'mealy')
+        self.benchmark_mealy_machine(mealy)
+
+    def test_bluetooth_benchmark2(self):
+        mealy_machine = load_automaton_from_file(DOT_MODELS_DIR / 'Bluetooth' / 'CYW43455.dot', 'mealy')
+        self.benchmark_mealy_machine(mealy_machine)
+
+
+
+
+
+

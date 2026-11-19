@@ -714,7 +714,8 @@ def mealy_machine_to_lts(mealy_machine: MealyMachine) -> Lts:
     Transform a Mealy machine into a labelled transition system (LTS).
 
     Each Mealy transition ``q --i/o--> q'`` is split into two LTS transitions
-    through a fresh intermediate state: ``q --i--> s --o--> q'``.
+    through a fresh intermediate state: ``q --i--> s --o--> q'``. State s will be
+    input enabled by creating self-loops.
 
     :param MealyMachine mealy_machine: The Mealy machine to convert.
     :return Lts: The resulting LTS, containing the original states plus one
@@ -724,6 +725,8 @@ def mealy_machine_to_lts(mealy_machine: MealyMachine) -> Lts:
     lts_initial = None
     lts_dict = {mealy_state: LtsState(mealy_state.state_id) for mealy_state in mealy_machine.states}
     lts_states: list[LtsState] = [lts_state for lts_state in lts_dict.values()]
+    mealy_machine_inputs = mealy_machine.get_input_alphabet()
+
     
     for mealy_state in mealy_machine.states:
         lts_state = lts_dict[mealy_state]
@@ -734,6 +737,9 @@ def mealy_machine_to_lts(mealy_machine: MealyMachine) -> Lts:
         for mealy_input, mealy_successor in mealy_state.transitions.items():
 
             lts_input_target = LtsState(f"{mealy_state.state_id}_{mealy_input}")
+            for i in mealy_machine_inputs:
+                lts_input_target.add_input(i, lts_input_target)
+            
             lts_states.append(lts_input_target)
 
             lts_state.add_input(mealy_input, lts_input_target)
