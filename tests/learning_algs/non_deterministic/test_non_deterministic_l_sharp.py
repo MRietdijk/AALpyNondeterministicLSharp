@@ -27,6 +27,24 @@ def non_deterministic_example():
         's3': {('?', 'a'): ['s3']},
     })
 
+def unstable_sul():
+    return Lts.from_state_setup({
+        's0': {('?', 'a'): ['s3', 's0'], ('?', 'b'): ['s0', 's2'], ('!', 'x'): ['s0']},
+        's1': {('?', 'a'): ['s2'], ('?', 'b'): ['s0'], ('τ', None): ['s2']},
+        's2': {('?', 'a'): ['s3'], ('?', 'b'): ['s1']},
+        's3': {('?', 'a'): ['s2'], ('?', 'b'): ['s3', 's2']},
+    })
+
+def another_stable_example():
+    return Lts.from_state_setup({
+        's0': {('!', 'x'): ['s0'], ('?', 'a'): ['s1', 's2'], ('?', 'b'): ['s3', 's4']},
+        's1': {('?', 'a'): ['s1'], ('?', 'b'): ['s4']},
+        's2': {('!', 'y'): ['s2'], ('?', 'a'): ['s2'], ('?', 'b'): ['s2']},
+        's3': {('?', 'a'): ['s3'], ('?', 'b'): ['s3']},
+        's4': {('?', 'a'): ['s4', 's5'], ('τ', None): ['s3']},
+        's5': {('?', 'a'): ['s5'], ('?', 'b'): ['s5'], ('!', 'x'): ['s5']},
+    })
+
 def mqtt_broker():
     return Lts.from_state_setup({
         's0': {('?', 'connect'): ['s0_connect'],
@@ -319,6 +337,14 @@ class TestRunQueryBenchMarks(unittest.TestCase):
     def test_benchmark_mqtt(self):
         mqtt_lts = mqtt_broker()
         self.run_benchmark(mqtt_lts)
+
+    def test_unstable_sul(self):
+        sul = unstable_sul()
+        self.run_benchmark(sul)
+
+    def test_another_stability_example(self):
+        sul = another_stable_example()
+        self.run_benchmark(sul)
 
     def test_benchmark_tcp(self):
         tcp_lts = load_automaton_from_file(DOT_MODELS_DIR / 'TCP.dot', 'lts')
