@@ -299,7 +299,7 @@ class LtsObservationTreeTest(unittest.TestCase):
         self.ob_tree.insert_observation([In('coin'), Out('tea')])
 
         self.ob_tree.promotion_rule()
-        self.ob_tree.completion_rule()
+        self.ob_tree.output_extension_rule()
 
         self.ob_tree.insert_observation([In('coin')] * 2 + [Out('coffee')])
         self.ob_tree.insert_observation([In('coin')] * 2 + [Out('tea')])
@@ -320,7 +320,7 @@ class LtsObservationTreeTest(unittest.TestCase):
         self.ob_tree.insert_observation([In('coin'), Out('tea')])
 
         self.ob_tree.promotion_rule()
-        self.ob_tree.completion_rule()
+        self.ob_tree.output_extension_rule()
 
         self.ob_tree.insert_observation([In('coin')] * 2 + [Out('coffee')])
 
@@ -506,7 +506,7 @@ class LtsObservationTreeBuildingRules(unittest.TestCase):
         self._init_with(coffee_machine())
 
     def test_extension_rule(self):
-        b = self.ob_tree.extension_rule()
+        b = self.ob_tree.input_extension_rule()
         q = self.ob_tree.tree_after([In('coin')])
 
         assert q is not None
@@ -515,7 +515,7 @@ class LtsObservationTreeBuildingRules(unittest.TestCase):
 
         self.assertTrue(len(q.outputs()) > 0)
 
-        b_prime = self.ob_tree.extension_rule()
+        b_prime = self.ob_tree.input_extension_rule()
 
         self.assertFalse(b_prime)
 
@@ -537,7 +537,7 @@ class LtsObservationTreeBuildingRules(unittest.TestCase):
     def test_completion_rule(self):
         self.test_promotion_rule()
 
-        self.ob_tree.completion_rule()
+        self.ob_tree.output_extension_rule()
 
         q = self.ob_tree.tree_after([In('coin')])
 
@@ -596,7 +596,7 @@ class LtsObservationTreeBuildingRules(unittest.TestCase):
         assert q_3 is not None
         assert q_4 is not None
 
-        self.ob_tree.completion_rule()
+        self.ob_tree.output_extension_rule()
         self.ob_tree.promotion_rule()
 
         self.assertIn(q_1, self.ob_tree.basis)
@@ -687,7 +687,7 @@ class LtsObservationTreeBuildingRules(unittest.TestCase):
         self.assertEqual(self.ob_tree.find_identifier(r), q_b)
         self.assertEqual(q_b.get_witness(r_prime), [In('a'), Out('x')])
 
-        self.assertTrue(self.ob_tree.stable_rule())
+        self.assertTrue(self.ob_tree.stablility_rule())
 
         r_a = self.ob_tree.tree_after(a_b_q_trace + [In('a')])
 
@@ -745,7 +745,7 @@ class LtsObservationTreeHypothesisRules(unittest.TestCase):
     def test_equivalence_rule(self):
         self._build_normal_coffee_machine_tree()
 
-        self.ob_tree.equivalence_rule(self.ob_tree.build_hypothesis())
+        self.ob_tree.equivalence_checking_rule(self.ob_tree.build_hypothesis())
 
         q_8 = self.ob_tree.tree_after([In('coin'), Out('tea')])
 
@@ -753,7 +753,7 @@ class LtsObservationTreeHypothesisRules(unittest.TestCase):
 
     def test_equivalence_rule_without_counter_example(self):
         self._build_full_coffee_tea_machine()
-        b = self.ob_tree.equivalence_rule(self.ob_tree.build_hypothesis())
+        b = self.ob_tree.equivalence_checking_rule(self.ob_tree.build_hypothesis())
         self.assertTrue(b)
 
     def test_quiescence_reducible_rule(self):
@@ -788,7 +788,7 @@ class LtsObservationTreeHypothesisRules(unittest.TestCase):
 
         self.assertIsNone(self.ob_tree.tree_after([In('coin'), Out('coffee')]))
 
-        b = self.ob_tree.quiescent_reducible_rule(self.ob_tree.build_hypothesis())
+        b = self.ob_tree.quiescence_reducibility_rule(self.ob_tree.build_hypothesis())
 
         self.assertTrue(b)
         self.assertIsNotNone(self.ob_tree.tree_after([In('coin'), Out('coffee')]))
@@ -799,8 +799,8 @@ class LtsObservationTreeHypothesisRules(unittest.TestCase):
         self.root.mark_complete()
         self.ob_tree.insert_observation([In('coin'), Out('coffee')])
         self.ob_tree.promotion_rule()
-        self.ob_tree.extension_rule()
-        self.ob_tree.completion_rule()
+        self.ob_tree.input_extension_rule()
+        self.ob_tree.output_extension_rule()
         self.ob_tree.identification_rule()
 
         self.ob_tree.insert_observation([In('coin'), Out('coffee'), In('coin'), Out('coffee'), In('coin'), In('coin'), Out('tea')])

@@ -5,6 +5,16 @@ from aalpy.base.LtsOracle import LtsOracle
 from aalpy.SULs.LtsAutomatonSUL import LtsAutomatonSUL
 
 from collections import deque
+
+PROMOTION_NAME                  = "promotion"
+INPUT_EXTENSION_NAME            = "input_extension"
+OUTPUT_EXTENSION_NAME           = "output_extension"
+IDENTIFICATION_NAME             = "identification"
+STABILITY_NAME                  = "stability"
+CONFLICT_PROCESSING_NAME        = "conflict_processing"
+QUIESCENCE_REDUCIBILITY_NAME    = "quiescence_reducibility"
+EQUIVALENCE_CHECKING_NAME       = "equivalence_checking"
+
 class LtsNode:
     """
     Single node of the observation tree for an LTS storing its labels
@@ -104,14 +114,14 @@ class LtsObservationTree:
         self.basis = {self.root}
         
         self.statistics: dict[str, int|float] = {
-            'promotion_rule_calls': 0,
-            'extension_rule_calls': 0,
-            'completion_rule_calls': 0,
-            'identification_rule_calls': 0,
-            'stable_rule_calls': 0,
-            'conflict_processing_rule_calls': 0,
-            'quiescent_reducible_rule_calls': 0,
-            'equivalence_rule_calls': 0,
+            PROMOTION_NAME:                 0,
+            INPUT_EXTENSION_NAME:           0,
+            OUTPUT_EXTENSION_NAME:          0,
+            IDENTIFICATION_NAME:            0,
+            STABILITY_NAME:                 0,
+            CONFLICT_PROCESSING_NAME:       0,
+            QUIESCENCE_REDUCIBILITY_NAME:   0,
+            EQUIVALENCE_CHECKING_NAME:      0,
         }
 
         self.state_to_tree_node: dict[LtsState, LtsNode] = dict()
@@ -274,27 +284,27 @@ class LtsObservationTree:
 
             if all(apartness_dict.values()):
                 self.basis.add(frontier_node)
-                self.statistics['promotion_rule_calls'] += 1
+                self.statistics[PROMOTION_NAME] += 1
                 fired = True
 
         return fired
 
 
 
-    def extension_rule(self) -> bool: 
+    def input_extension_rule(self) -> bool: 
         fired = False
         for basis_node in self.basis:
             inputs = basis_node.inputs()
             for i in self.input_labels - inputs:
                 q = basis_node.extend_and_get(i)
                 self.output_extension(q)
-                self.statistics['extension_rule_calls'] += 1 
+                self.statistics[INPUT_EXTENSION_NAME] += 1 
                 fired = True
 
         return fired
                 
 
-    def completion_rule(self) -> bool:
+    def output_extension_rule(self) -> bool:
         fired = False
         for basis_node in self.basis:
             if not basis_node.is_complete:
@@ -302,7 +312,7 @@ class LtsObservationTree:
                 while not b:
                     b = self.output_extension(basis_node)
                 
-                self.statistics['completion_rule_calls'] += 1
+                self.statistics[OUTPUT_EXTENSION_NAME] += 1
                 fired = True
 
         return fired
@@ -327,7 +337,7 @@ class LtsObservationTree:
                     raise AssertionError(f"{r1} and {r2} are in the basis, but are not apart from each other")
 
                 self.do(frontier_node, witness)
-                self.statistics['identification_rule_calls'] += 1
+                self.statistics[IDENTIFICATION_NAME] += 1
                 fired = True
 
                 candidates = self.find_candidates(frontier_node)
@@ -341,7 +351,7 @@ class LtsObservationTree:
         else:
             return None
 
-    def stable_rule(self) -> bool:
+    def stablility_rule(self) -> bool:
         fired = False
         for q in self.basis:
             r = q.get_successor(QUIESCENCE)
@@ -364,7 +374,7 @@ class LtsObservationTree:
                 continue
 
             self.do(r, witness)
-            self.statistics['stable_rule_calls'] += 1
+            self.statistics[STABILITY_NAME] += 1
             fired = True
 
         return fired
@@ -448,7 +458,7 @@ class LtsObservationTree:
 
             q_prime = self.state_to_tree_node[q_prime_state]
             self.do(q_prime, rho + sigma)
-            self.statistics['conflict_processing_rule_calls'] += 1
+            self.statistics[CONFLICT_PROCESSING_NAME] += 1
             return True
 
         return False
@@ -476,7 +486,7 @@ class LtsObservationTree:
         for symbol in trace:
             current_state = current_state.extend_and_get(symbol)
 
-    def quiescent_reducible_rule(self, hypothesis: SuspensionAutomaton) -> bool:
+    def quiescence_reducibility_rule(self, hypothesis: SuspensionAutomaton) -> bool:
         for q in hypothesis.states:
             if QUIESCENCE not in q.outputs():
                 continue
@@ -500,13 +510,13 @@ class LtsObservationTree:
             if (self.do(q_prime, sigma)):
                 self.add_trace(q_node, sigma)
 
-            self.statistics['quiescent_reducible_rule_calls'] += 1
+            self.statistics[QUIESCENCE_REDUCIBILITY_NAME] += 1
             return True
 
         return False
 
-    def equivalence_rule(self, hypothesis: SuspensionAutomaton) -> bool:
-        self.statistics['equivalence_rule_calls'] += 1
+    def equivalence_checking_rule(self, hypothesis: SuspensionAutomaton) -> bool:
+        self.statistics[EQUIVALENCE_CHECKING_NAME] += 1
         counter_example = self.oracle.find_cex(hypothesis)
 
         if counter_example is None:

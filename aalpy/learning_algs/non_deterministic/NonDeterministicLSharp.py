@@ -31,23 +31,23 @@ class NonDeterministicLSharp():
         while True:
                 if self.observation_tree.promotion_rule():
                     continue
-                elif self.observation_tree.extension_rule():
+                elif self.observation_tree.input_extension_rule():
                     continue
-                elif self.observation_tree.completion_rule():
+                elif self.observation_tree.output_extension_rule():
                     continue
                 elif self.observation_tree.identification_rule():
                     continue
-                elif self.observation_tree.stable_rule():
+                elif self.observation_tree.stablility_rule():
                     continue
                 else:
                     hypothesis = self.observation_tree.build_hypothesis()
         
                     if self.observation_tree.conflict_processing_rule(hypothesis):
                         continue
-                    elif self.observation_tree.quiescent_reducible_rule(hypothesis):
+                    elif self.observation_tree.quiescence_reducibility_rule(hypothesis):
                         continue
                     else:
-                        b = self.observation_tree.equivalence_rule(hypothesis)
+                        b = self.observation_tree.equivalence_checking_rule(hypothesis)
                         if b:
                             return hypothesis
 

@@ -4,6 +4,16 @@ from pathlib import Path
 
 
 from aalpy.learning_algs.deterministic.LSharp import run_Lsharp
+from aalpy.learning_algs.non_deterministic.LtsObservationTree import (
+    PROMOTION_NAME,
+    INPUT_EXTENSION_NAME,
+    OUTPUT_EXTENSION_NAME,
+    IDENTIFICATION_NAME,
+    STABILITY_NAME,
+    CONFLICT_PROCESSING_NAME,
+    QUIESCENCE_REDUCIBILITY_NAME,
+    EQUIVALENCE_CHECKING_NAME,
+)
 from aalpy.automata.MealyMachine import MealyMachine
 from aalpy.automata.Lts import Lts, SuspensionAutomaton, Trace
 from aalpy.learning_algs.non_deterministic.NonDeterministicLSharp import NonDeterministicLSharp
@@ -240,17 +250,17 @@ class TestRunNonDeterministicLSharp(unittest.TestCase):
         stats = learn_algorithm.observation_tree.get_current_stats()
 
         expected = {
-            'promotion_rule_calls': 1,
-            'extension_rule_calls': 2,
-            'completion_rule_calls': 2,
-            'identification_rule_calls': 2,
-            'stable_rule_calls': 0,
-            'conflict_processing_rule_calls': 0,
-            'quiescent_reducible_rule_calls': 0,
-            'equivalence_rule_calls': 1,
-            'equivalence_query_calls': 1,
-            'nr_of_tree_states': 9,
-            'nr_of_hypothesis_states': 2,
+            PROMOTION_NAME:                 1,
+            INPUT_EXTENSION_NAME:           2,
+            OUTPUT_EXTENSION_NAME:          2,
+            IDENTIFICATION_NAME:            2,
+            STABILITY_NAME:                 0,
+            CONFLICT_PROCESSING_NAME:       0,
+            QUIESCENCE_REDUCIBILITY_NAME:   0,
+            EQUIVALENCE_CHECKING_NAME:      1,
+            'equivalence_query_calls':      1,
+            'nr_of_tree_states':            9,
+            'nr_of_hypothesis_states':      2,
         }
 
         actual = {key: stats.get(key) for key in expected}
